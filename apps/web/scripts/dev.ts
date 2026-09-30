@@ -31,14 +31,17 @@ const { default: serverConfig } = (await import("../rspack.server.config.ts")) a
   default: Configuration;
 };
 
-const serverBundle = path.join(import.meta.dirname, "../dist/server/server.js");
+const serverBundle = path.join(String(serverConfig.output?.path), "server.js");
 
 const clientCompiler = rspack(clientConfig);
 const devServer = new RspackDevServer(clientConfig.devServer || {}, clientCompiler);
 await devServer.start();
 
+const appUrl = `http://localhost:${process.env.PORT ?? 3000}`;
+
 let child: ChildProcess | undefined;
 let restarting = Promise.resolve();
+let announced = false;
 
 async function stopChild() {
   const current = child;
@@ -55,6 +58,11 @@ function restartServer() {
       stdio: "inherit",
       env: process.env,
     });
+    if (!announced) {
+      announced = true;
+      // The dev server's own banner points at :3001 (assets only); make the real URL obvious.
+      console.warn(`\n  ➜  PulseDesk:  \x1b[1;36m${appUrl}\x1b[0m  (open this one)\n`);
+    }
   });
   return restarting;
 }

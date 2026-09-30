@@ -5,7 +5,8 @@ import type { PublicConfig } from "@/lib/bootstrap";
 // branches are dead-code-eliminated from the production server bundle.
 const isProd = process.env.NODE_ENV === "production";
 
-// Bundled output lives in dist/server; the client build sits next to it in dist/client.
+// Bundled output lives in dist/server (or .dev/server in development); the production
+// client build sits next to it in dist/client.
 const distDir = path.resolve(import.meta.dirname, "..");
 const appDir = path.resolve(distDir, "..");
 

@@ -5,7 +5,12 @@ import { errorFields, log } from "./log";
 import { ManifestNotReadyError, createManifestLoader } from "./manifest";
 import { handlePageRequest } from "./ssr";
 
-const getManifest = createManifestLoader(config.clientDist, { cache: config.isProd });
+const getManifest = createManifestLoader(
+  config.isProd
+    ? { kind: "file", clientDist: config.clientDist }
+    : { kind: "dev-server", origin: config.clientDevOrigin },
+  { cache: config.isProd },
+);
 
 // Hashed client assets: cache forever. Only served by this process in production;
 // in development the Rspack dev server serves them (with HMR).

@@ -6,13 +6,17 @@ export const rootDir = import.meta.dirname;
 export const isDev = process.env.NODE_ENV !== "production";
 
 export const CLIENT_DEV_PORT = Number(process.env.CLIENT_DEV_PORT ?? 3001);
+/** Port of the SSR server — the URL developers actually open. */
+export const SSR_PORT = Number(process.env.PORT ?? 3000);
 
 export const paths = {
   src: path.join(rootDir, "src"),
   clientEntry: path.join(rootDir, "client/entry-client.tsx"),
   serverEntry: path.join(rootDir, "server/server.ts"),
   clientOutput: path.join(rootDir, "dist/client"),
-  serverOutput: path.join(rootDir, "dist/server"),
+  // Dev builds go to .dev/ so a running `pnpm dev` and a production `pnpm build` never
+  // overwrite each other's bundles.
+  serverOutput: path.join(rootDir, isDev ? ".dev/server" : "dist/server"),
 };
 
 /**

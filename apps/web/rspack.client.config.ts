@@ -1,3 +1,4 @@
+import type { IncomingMessage, ServerResponse } from "node:http";
 import { defineConfig } from "@rspack/cli";
 import { type Compiler, rspack } from "@rspack/core";
 import { ReactRefreshRspackPlugin } from "@rspack/plugin-react-refresh";
@@ -8,6 +9,7 @@ import {
   paths,
   resolve,
   rootDir,
+  SSR_PORT,
   swcRule,
 } from "./rspack.shared.ts";
 
@@ -102,9 +104,20 @@ export default defineConfig({
     headers: { "Access-Control-Allow-Origin": "*" },
     allowedHosts: "all",
     client: { overlay: { errors: true, warnings: false } },
-    devMiddleware: {
-      // The SSR server reads the manifest from disk; everything else stays in memory.
-      writeToDisk: (file: string) => file.endsWith(ASSET_MANIFEST),
+    // Everything, including asset-manifest.json, is served from memory; the SSR server
+    // fetches the manifest from here over HTTP (see server/manifest.ts).
+    // This server only serves assets. If someone opens it in a browser, send page
+    // requests to the SSR server instead of showing "Cannot GET /".
+    setupMiddlewares: (middlewares) => {
+      middlewares.push({
+        name: "redirect-pages-to-ssr",
+        middleware: (req: IncomingMessage, res: ServerResponse, next: () => void) => {
+          if (req.method !== "GET" || !req.headers.accept?.includes("text/html")) return next();
+          res.writeHead(302, { Location: `http://localhost:${SSR_PORT}${req.url ?? "/"}` });
+          res.end();
+        },
+      });
+      return middlewares;
     },
   },
 });
