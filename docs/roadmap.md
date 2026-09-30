@@ -1,0 +1,424 @@
+# PulseDesk roadmap
+
+Delivery plan for the remaining phases. Each phase ends in a **runnable, green
+repository** (lint, typecheck, unit/component tests, build and E2E pass) and a demoable
+increment. The plan is a working document: when a phase changes the plan, update this
+file in the same PR.
+
+| Phase | Theme                                                              | Status  |
+| ----- | ------------------------------------------------------------------ | ------- |
+| 1     | Foundation: monorepo, contracts, design system, streaming SSR      | ✅ Done |
+| 2     | Dashboard, sessions list, session detail (on generated data)       | ✅ Done |
+| 3     | Realtime: gateway, simulator, realtime client, Redux wiring        | Next    |
+| 4     | Reliability: reconnect, replay, heartbeat, fault injection         |         |
+| 5     | AI copilot: service, HTTP streaming, copilot UI                    |         |
+| 6     | AI quality: evaluation, hallucination regressions, AI workflow     |         |
+| 7     | Performance: batching at scale, virtualisation, splitting, budgets |         |
+| 8     | Testing: gap-filling, a11y automation, CI for the full stack       |         |
+| 9     | Documentation: README, architecture, ADRs, demo script             |         |
+| 10    | Polish: accessibility, mobile, states, security, code quality      |         |
+
+## Adjustments to the original phase plan
+
+These changes come from what Phases 1–2 taught us:
+
+1. **Tests are written in the phase that introduces the behaviour**, not deferred to
+   Phase 8. Phase 8 becomes gap-filling, cross-cutting automation (axe, full-stack CI)
+   and the coverage review.
+2. **The reconnect E2E test moves to Phase 4.** It is the acceptance test for the
+   reliability work, so it lands with that work.
+3. **`packages/observability` starts in Phase 3** with a minimal API. The metrics listed
+   in the brief (`websocket.reconnect.count`, `ai.request.duration`, …) are emitted by
+   Phase 3–5 code, so the API has to exist before then. Phase 7 fleshes it out.
+4. **Remaining UI primitives are built when first needed**, not up front:
+   `Toast` (Phase 3 notifications), `Dialog` and `Tooltip` (Phase 4 reliability panel),
+   `Tabs` (Phase 5 mobile session layout).
+
+## Ports and processes (target for `pnpm dev`)
+
+| Process                      | Port                      | Starts in |
+| ---------------------------- | ------------------------- | --------- |
+| web (SSR)                    | 3000                      | Phase 1   |
+| web client assets / HMR      | 3001                      | Phase 1   |
+| realtime-gateway (HTTP + WS) | 4000                      | Phase 3   |
+| ai-service                   | 4100                      | Phase 5   |
+| event-simulator              | — (client of the gateway) | Phase 3   |
+
+---
+
+## Phase 3 — Realtime
+
+**Goal:** `pnpm dev` starts web, gateway and simulator. The dashboard and session pages
+update live. The generated mock data is removed.
+
+### Architecture decisions
+
+- **Single-writer gateway assigns sequences.** The simulator posts unsequenced events.
+  The gateway validates them, assigns the next global `sequence`, appends them to the
+  event log, updates its session projection and fans out to sockets. One writer makes
+  ordering trivially correct for the demo; see Phase 9 docs for partitioned evolution.
+- **Simulator → gateway over HTTP batch ingest** (`POST /ingest`, NDJSON or JSON array),
+  not WebSocket. Ingest and fan-out are different concerns, retries are simpler, and it
+  mirrors how a real collector would sit in front of the gateway.
+- **`EventLog` interface** (`append`, `readAfter(sequence, limit)`, `oldestSequence`,
+  `headSequence`) with an in-memory ring-buffer implementation. The documented
+  production swap is Redis Streams or Kafka.
+- **Session projection in the gateway** (`SessionStore`) answers snapshot requests:
+  `GET /sessions` and `GET /sessions/:id`, the latter with a bounded recent timeline.
+  Every snapshot carries the `sequence` it reflects (already in `contracts`).
+- **The web server's `SessionsSource` becomes a gateway HTTP client.** The UI and store
+  don't change, and SSR keeps its 250 ms data budget.
+- **Client resumes from the SSR snapshot's sequence**, so no events are lost between
+  server render and socket open.
+- **Event batching from day one.** The realtime provider buffers incoming events and
+  dispatches a single `eventsReceived(batch)` action per flush (~32 ms, or per animation
+  frame while visible). Phase 7 measures and tunes it.
+
+### Deliverables
+
+- `apps/realtime-gateway`
+  - `server.ts` (HTTP + `ws` upgrade on `/ws`, health, graceful shutdown)
+  - `websocket/connection-manager.ts` (registry, broadcast, per-socket send queue)
+  - `websocket/session-room.ts` (who is watching which session → presence events)
+  - `websocket/heartbeat.ts` (protocol-level ping, terminate dead sockets)
+  - `websocket/replay-buffer.ts` (in-memory `EventLog`)
+  - `events/` (ingest validation, sequencing, session projection)
+  - All inbound data validated with `@pulsedesk/contracts` decoders
+- `apps/event-simulator`
+  - Journey state machine (landing → browse → pricing → CTA → form → checkout → close)
+    using the `test-utils` vocabulary. Believable timing between steps.
+  - `SESSION_COUNT`, `EVENT_RATE`, `ERROR_RATE` (malformed or failed-submit events) env
+    configuration. Warm start so the dashboard is populated immediately.
+  - Retries with backoff while the gateway is down.
+- `packages/realtime-client` (Phase 3 scope): typed connection state machine
+  (`idle → connecting → open → closed`), `hello`/`welcome` handshake with `resumeAfter`,
+  typed subscriptions, clean `close()`. Transport injected, so tests use a fake
+  WebSocket.
+- `packages/state`
+  - `sessionEvents` slice: per-session timelines, normalised, bounded length per session
+  - `connection` slice: status, last sequence, health fields
+  - `eventsReceived(batch)` updates sessions (status, current page, counters) and
+    timelines in one reducer pass
+  - `notifications` slice (for toasts)
+- `packages/observability` (minimal): `logger`, `metrics.counter/histogram/gauge`, a
+  console sink and an in-memory sink.
+- `apps/web`
+  - `RealtimeProvider` (client-only, starts in an effect, never during SSR)
+  - Event batcher
+  - `ConnectionIndicator` in the top bar
+  - Live activity timeline on the session page (not virtualised yet)
+  - `Toast` primitive in `packages/ui`
+  - Gateway-backed `SessionsSource`; delete `mock-sessions-source.ts`
+- Turbo: `dev` runs all apps; the gateway declares a health check the simulator waits on.
+
+### Tests
+
+- Gateway integration: a real `ws` client connects, receives a snapshot, receives live
+  events in sequence order; ingest rejects malformed events.
+- Reducer tests: every event type applied to sessions/timelines; batch = sequential.
+- Batcher: flush interval, flush on size cap, flush on unmount.
+- realtime-client: handshake, typed dispatch, invalid frames counted and ignored.
+- E2E: open dashboard, a new session appears without reload; open a session, its
+  timeline grows.
+
+### Done when
+
+`pnpm dev` → dashboard updates live within a second of simulator activity. The
+indicator shows **Live**. Killing the simulator stops activity without errors.
+
+---
+
+## Phase 4 — Reliability
+
+**Goal:** the connection survives drops, stalls, duplicates and reordering with no lost
+or duplicated timeline entries, and the UI explains what is happening without nagging.
+
+### Architecture decisions
+
+- **Reconnect policy:** exponential backoff with full jitter (1 s base, 30 s cap),
+  reset after a connection has been healthy for a grace period. Immediate retry on
+  `online` and on tab becoming visible after a long hidden period.
+- **Heartbeat:** client `ping` every N seconds. A missing `pong` within the timeout marks
+  the socket dead and triggers a reconnect. RTT feeds a rolling health estimate.
+- **Degraded:** open but unhealthy (RTT above threshold, or recent missed pongs). It is
+  distinct from Reconnecting.
+- **Ordering and dedupe, client side:**
+  - Drop any event with `sequence <= lastApplied`, and any seen `eventId` (bounded LRU).
+  - Hold out-of-order events in a reorder buffer until the gap fills.
+  - If the gap doesn't fill within a timeout, request a resync (`hello` with
+    `resumeAfter = lastApplied`) on the same connection.
+- **Replay:** the gateway replays from the event log after the cursor, framed by
+  `sync.started` and `sync.completed`. If the cursor is older than the buffer, it sends
+  a fresh `snapshot` and the client replaces state.
+- **Backpressure, server side:** per-socket `bufferedAmount` threshold. Slow consumers
+  are disconnected with a reason code, and replay recovers them when they reconnect.
+
+### Deliverables
+
+- `realtime-client`
+  - backoff
+  - heartbeat
+  - health info: `rttMs`, `reconnectCount`, `connectedSince`, `lastEventAt`,
+    `eventsDropped`
+  - online/visibility handling
+  - reorder buffer and dedupe
+  - resync
+  - `close()` that cancels timers and never reconnects
+- Gateway: heartbeat termination, replay, snapshot-on-expired-cursor, backpressure,
+  connection limits.
+- **Status UX:**
+  - Indicator states: Live, Connecting, Reconnecting (with "retrying in 4s"),
+    Degraded, Offline.
+  - A non-modal banner only after a prolonged outage.
+  - A "Catching up… 23 events" state during sync.
+  - Replayed events insert in order with a subtle highlight, never duplicated.
+  - No toast per reconnect.
+- **Developer reliability panel** (`Dialog` and `Tooltip` primitives land here):
+  - Controls: disconnect, reconnect, artificial latency, drop N events, duplicate next
+    event, deliver next batch out of order.
+  - Client-side fault injection wraps the transport. Gateway debug routes are
+    registered only outside production.
+  - Excluded from the production bundle: loaded via dynamic import behind
+    `config.devTools`, which is dead-code-eliminated when `NODE_ENV=production`. A CI
+    check greps the production bundle for the panel's marker string.
+- Docs: `docs/realtime-reliability.md`, `docs/adr/001-websocket-vs-sse.md`.
+
+### Tests
+
+- realtime-client with fake timers:
+  - the exact backoff sequence (seeded jitter)
+  - heartbeat timeout triggers reconnect
+  - dedupe by sequence and by eventId
+  - reorder buffer releases in order
+  - gap timeout triggers resync
+  - `close()` leaves no timers
+- Integration: in-process gateway plus real client; kill the socket mid-stream and assert
+  the replayed sequence is contiguous.
+- **Flagship E2E:** open live session → receive events → disconnect via the panel → UI
+  shows Reconnecting → simulator produces events while disconnected → reconnect →
+  missed events appear **once and in order** (assert on sequence numbers in DOM
+  attributes) → UI shows Live.
+
+### Done when
+
+Every control in the reliability panel can be triggered during the demo and the
+timeline stays correct. The flagship E2E is green in CI.
+
+---
+
+## Phase 5 — AI copilot
+
+**Goal:** ask the copilot about a session and watch the answer stream in, with
+cancel, retry, timeout and failure handled cleanly and independently of the WebSocket.
+
+### Architecture decisions
+
+- **Transport:** `POST /api/ai/chat` on the web server (same-origin backend-for-frontend)
+  proxies to `ai-service` and streams the response straight through. There's no CORS,
+  the browser never sees provider details, and one place enforces limits.
+- **Wire format:** NDJSON chunks (`{type:"delta"|"done"|"error", …}`) validated with
+  `contracts`. Simpler than SSE for a POST, and each line is independently parseable.
+- **Provider abstraction:** `AIProvider.stream(request, signal): AsyncIterable<AIChunk>`.
+  Two providers:
+  - Mock (default): deterministic, grounded strictly in the supplied context, with
+    realistic token pacing.
+  - Real provider (`openai.provider.ts`) enabled by env vars.
+- **Context mapping:** `toAIContext(session, events)` produces a minimal, explicit
+  structure: event types, paths, element labels, timings. It excludes internal ids,
+  sequence numbers and anything not needed. It's unit-tested as a privacy boundary.
+- **Cancellation propagates end to end:** browser `AbortController` → web proxy aborts its
+  upstream fetch → ai-service aborts the provider stream.
+- **Timeouts:** time-to-first-token and total-duration limits, enforced in both the
+  browser and the service.
+- **State:** an `ai` slice keyed by request id stores status, partial text, error,
+  timing and parent session. Partial text is appended in batched updates (per frame),
+  not per token.
+
+### Deliverables
+
+- `packages/contracts`: AI request, context and chunk schemas.
+- `apps/ai-service`: `server.ts`, `stream.ts`, `prompts/`, `providers/mock.provider.ts`,
+  `providers/openai.provider.ts`.
+  - Dev-only fault injection (timeout, HTTP 500, slow stream), selectable from the
+    reliability panel.
+- `apps/web`:
+  - Streaming client utility (`ReadableStream` reader, NDJSON parse, abort, timeouts).
+  - Copilot panel, **lazy-loaded** with `React.lazy`:
+    - quick actions (summarise, what's blocking, suggest reply, unusual behaviour,
+      key events only)
+    - free-form prompt
+    - progressive rendering with a caret
+    - cancel, retry, and "partial answer kept" on failure
+    - several requests in the conversation at once
+  - The session page becomes three panels on desktop and tabs on mobile.
+  - "AI summaries generated" stat tile.
+- Reliability panel: AI timeout, AI 500, slow AI.
+
+### Tests
+
+- Stream parser: split chunks across reads, malformed lines, early close.
+- `ai` slice: lifecycle, cancel keeps partial text, retry creates a new attempt.
+- ai-service: abort stops the provider, timeout closes the stream with an `error`
+  chunk, and 500 paths.
+- E2E: stream renders progressively, cancel mid-stream, retry succeeds, 500 and
+  timeout show the error state, and the WebSocket stays Live throughout.
+
+### Done when
+
+Demo steps 12–17 from the brief work in one continuous take.
+
+---
+
+## Phase 6 — AI quality and AI-assisted workflow
+
+**Goal:** show that AI output is checked, not trusted, and document how AI is used
+to build this project.
+
+### Deliverables
+
+- `apps/ai-service/src/evaluation/`
+  - **Fixtures:** realistic sessions with the facts they support and the claims they
+    must _not_ support. Example: pricing → enterprise → pricing → "Upgrade" click must
+    not produce "completed payment".
+  - **Grounding checker:** claims are extracted with a rule-based taxonomy (purchase,
+    signup, form submission, error encountered, contact request) and verified against
+    event evidence. Deterministic, fast, and explainable.
+  - **Regression suite:** runs against the mock provider in CI. `pnpm eval` runs the
+    same fixtures against a real provider when a key is present, and writes a report.
+  - **Runtime guard:** ungrounded claims in a streamed answer are flagged in the UI
+    ("couldn't verify: …") rather than silently shown.
+  - `LIMITATIONS.md`: what rule-based checking cannot catch, provider nondeterminism,
+    fixture coverage.
+- `prompts/`: `feature-planning.md`, `implementation.md`, `code-review.md`,
+  `test-generation.md`, `refactoring.md`. Each is written for this codebase: its
+  packages, boundaries, and known failure modes (hydration, StrictMode, CSP, reconnect).
+- `docs/ai-development-workflow.md`: the loop from requirement to AI planning to human
+  review to implementation to tests to AI review to human final review. It includes real
+  examples from this repository's history, such as the mutation-tested hydration guard,
+  the Zod CSP finding and the wrong-port dev confusion.
+- `.github/pull_request_template.md` with the AI-assistance section.
+
+### Done when
+
+Removing a guard in the mock provider (so it invents a payment) makes CI fail.
+
+---
+
+## Phase 7 — Performance
+
+**Goal:** stay smooth under bursts and long sessions, and bring the bundle back under
+budget with numbers to show for it.
+
+### Deliverables
+
+- **Virtualised timeline** (`@tanstack/react-virtual`) with stick-to-bottom behaviour
+  that pauses when the user scrolls up and shows a "N new events" pill. The sessions
+  table is virtualised past a threshold.
+- **Route-level code splitting** with `React.lazy` (session detail, copilot). Streaming
+  SSR plus selective hydration handle lazy boundaries.
+- **Bundle:**
+  - Evaluate `zod/mini` for client-side parsing (the largest known win; see
+    `performance.md`).
+  - Bundle analysis with Rsdoctor.
+  - Enforce the budget in CI (`performance.yml`).
+- **Batching tuned with measurements:** flush interval against events per second, render
+  count and frame time. Measured, not assumed.
+- **Observability, complete:**
+  - Web Vitals (LCP, INP, CLS) reported through `packages/observability`.
+  - React Profiler timing for `session.timeline.render.duration`.
+  - All metrics from the brief emitted.
+  - A dev metrics view in the reliability panel.
+- **Load and stress scenarios (`tests/load/`):**
+  - 100 concurrent simulated sessions
+  - a 1,000-event burst (reducer throughput measured headlessly via `packages/state`)
+  - repeated reconnects (no leaks: socket and timer counts return to baseline)
+  - a 10,000-event timeline
+  - 10 concurrent AI streams
+- `docs/performance.md` completed with before/after tables.
+
+### Done when
+
+The initial JS is within budget, a 1,000-event burst doesn't drop frames below target on
+a mid-range profile, and the results are recorded.
+
+---
+
+## Phase 8 — Testing
+
+**Goal:** close the gaps and make the whole stack testable in CI.
+
+- Coverage review per package. Target the logic that is risky, not a vanity number.
+- `@axe-core/playwright` scan on every page and state (loading, error, reconnecting).
+- Component tests for all connection-indicator states and copilot states.
+- CI runs E2E against the **full stack**: Playwright `webServer` array for web, gateway,
+  ai-service and a deterministic simulator seed.
+- Flake audit: run E2E ×20 locally, and fix any source of nondeterminism.
+
+---
+
+## Phase 9 — Documentation
+
+- `README.md` in final form:
+  - overview, demo GIF, screenshots, architecture diagram
+  - technology choices, realtime reliability, AI architecture, AI workflow
+  - performance, testing, running locally, environment variables
+  - repository structure, tradeoffs, future improvements
+- `docs/architecture.md`:
+  - apps and packages, request/SSR/realtime/AI flows (ASCII diagrams)
+  - Redux boundaries, failure handling
+  - **honest scaling section**. The demo runs as one gateway with an in-memory log. The
+    production path would be partitioned streams (Redis Streams or Kafka), horizontally
+    scaled gateways behind a load balancer with shared pub/sub, per-partition cursors,
+    and connection affinity only where needed.
+- ADRs 001–003 finalised. Add new ADRs for decisions made along the way (for example
+  NDJSON vs SSE for AI, and batching strategy).
+- `docs/demo.md`: the 20-step interview walkthrough, with the exact clicks and what to
+  say at each step.
+
+---
+
+## Phase 10 — Polish
+
+- **Accessibility pass:**
+  - screen reader walkthrough (NVDA and VoiceOver) of every flow
+  - focus management on route change and after dialogs
+  - live-region audit so realtime updates are announced sparingly
+  - reduced motion, forced colours
+- **Responsive:** tablet layouts, the session page on small screens, touch targets.
+- **State consistency:** every surface has deliberate loading, empty, error, offline and
+  reconnecting states. Audit them side by side.
+- **Security review:** CSP, input validation at every boundary, rate limits on ingest and
+  AI, and no secrets reaching the client bundle.
+- **Code quality:** dead code, naming, comment accuracy, dependency audit.
+- Final Lighthouse and Web Vitals run recorded in `performance.md`.
+
+---
+
+## Cross-cutting
+
+### Definition of done (every phase)
+
+- `pnpm check`, `pnpm build`, `pnpm e2e` green from a cold Turbo cache.
+- New behaviour has tests at the lowest useful level, plus E2E for user-facing flows.
+- Visual check in a real browser: light, dark and mobile.
+- Docs and this roadmap updated if a decision changed.
+- **One branch and pull request per phase**, using the PR template, so the history
+  reads as reviewed, incremental delivery.
+
+### Carried-over items
+
+| Item                                                              | From    | Planned in     |
+| ----------------------------------------------------------------- | ------- | -------------- |
+| Client entry over the 350 KB budget (Zod is the main contributor) | Phase 2 | Phase 7        |
+| Delete generated mock session source                              | Phase 2 | Phase 3        |
+| Commit Phases 1–2                                                 | Phase 2 | Before Phase 3 |
+
+### Risks
+
+| Risk                                  | Mitigation                                                                                                         |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Flaky realtime E2E (timing-dependent) | Deterministic simulator seed; assert on sequence numbers, not timing; fake-timer unit tests carry the timing logic |
+| Hydration mismatches from live data   | Snapshot + sequence handshake; server clock during hydration; hydration tests with clock skew (already in place)   |
+| Scope creep in AI evaluation          | Rule-based grounding with explicit limitations, rather than LLM-as-judge                                           |
+| Real AI provider unavailable in CI    | Mock provider is the default; real-provider eval is opt-in and local                                               |
+| Dev tooling leaking into production   | Dead-code elimination by `NODE_ENV`, plus a CI assertion on the production bundle                                  |

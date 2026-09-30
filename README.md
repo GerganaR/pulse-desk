@@ -55,6 +55,10 @@ Internal packages ship **TypeScript source** with no build step. Rspack, Vitest 
 native type stripping consume them directly. This removes stale-`dist` issues and
 watch-order coupling from the task graph.
 
+## Roadmap
+
+Phase-by-phase delivery plan, decisions and acceptance criteria: [docs/roadmap.md](docs/roadmap.md).
+
 ## Architecture decisions
 
 - [ADR-002: Redux state boundaries](docs/adr/002-redux-state-boundaries.md)
