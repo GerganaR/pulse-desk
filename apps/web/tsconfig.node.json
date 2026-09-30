@@ -1,0 +1,10 @@
+{
+  // Node-side code: the SSR server, dev orchestration and bundler configs. Kept separate so
+  // browser code under src/ can't accidentally reach for Node globals like `process`.
+  "extends": "@pulsedesk/typescript-config/react.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "paths": { "@/*": ["./src/*"] }
+  },
+  "include": ["server", "scripts", "rspack.*.ts", "vitest.config.ts"]
+}

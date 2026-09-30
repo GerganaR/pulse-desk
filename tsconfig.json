@@ -1,0 +1,8 @@
+{
+  // Each workspace package owns its tsconfig and is type-checked independently via
+  // `turbo run typecheck`. Packages ship TypeScript source (no build step), so project
+  // references / `tsc -b` would add declaration emit for no benefit.
+  // This root file exists so editors and root-level tooling have an anchor.
+  "extends": "./packages/typescript-config/base.json",
+  "files": []
+}

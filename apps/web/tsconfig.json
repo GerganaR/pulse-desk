@@ -1,0 +1,8 @@
+{
+  "extends": "@pulsedesk/typescript-config/react.json",
+  "compilerOptions": {
+    "types": ["@testing-library/jest-dom/vitest"],
+    "paths": { "@/*": ["./src/*"] }
+  },
+  "include": ["src", "client", "vitest.setup.ts"]
+}

@@ -1,0 +1,35 @@
+import type { ReactNode } from "react";
+import type { AssetManifest } from "@/lib/bootstrap";
+
+export interface DocumentProps {
+  assets: AssetManifest;
+  children: ReactNode;
+}
+
+/**
+ * The full HTML document, rendered by React on the server and hydrated with
+ * `hydrateRoot(document, …)` on the client. Rendering the whole document (rather than
+ * string-templating a shell around a #root div) lets React 19 own <head>: pages declare
+ * <title>/<meta> inline and React hoists them, and stylesheets with `precedence` are
+ * deduplicated and ordered by React.
+ */
+export function Document({ assets, children }: DocumentProps) {
+  return (
+    <html lang="en">
+      <head>
+        <meta charSet="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+        <meta
+          name="description"
+          content="PulseDesk — monitor live website sessions and get AI-assisted context in real time."
+        />
+        <meta name="color-scheme" content="light dark" />
+        <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+        {assets.styles.map((href) => (
+          <link key={href} rel="stylesheet" href={href} precedence="default" />
+        ))}
+      </head>
+      <body>{children}</body>
+    </html>
+  );
+}

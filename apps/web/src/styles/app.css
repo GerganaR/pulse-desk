@@ -1,0 +1,5 @@
+@import "tailwindcss";
+@import "@pulsedesk/ui/theme.css";
+
+/* The UI package ships source; tell Tailwind to scan it for class names. */
+@source "../../../../packages/ui/src";

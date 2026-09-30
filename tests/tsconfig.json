@@ -1,0 +1,7 @@
+{
+  "extends": "@pulsedesk/typescript-config/node.json",
+  "compilerOptions": {
+    "lib": ["ES2023", "DOM"]
+  },
+  "include": ["e2e", "playwright.config.ts"]
+}

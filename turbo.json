@@ -1,0 +1,34 @@
+{
+  "$schema": "https://turborepo.com/schema.json",
+  "ui": "tui",
+  "globalDependencies": [".nvmrc", "tsconfig.json"],
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "inputs": ["$TURBO_DEFAULT$", "!**/*.test.{ts,tsx}", "!**/*.md"],
+      "outputs": ["dist/**"],
+      "env": ["NODE_ENV", "CLIENT_DEV_PORT"]
+    },
+    "typecheck": {
+      "dependsOn": ["^typecheck"],
+      "outputs": []
+    },
+    "lint": {
+      "outputs": []
+    },
+    "test": {
+      "outputs": ["coverage/**"]
+    },
+    "dev": {
+      "cache": false,
+      "persistent": true,
+      "passThroughEnv": ["PORT", "HOST", "CLIENT_DEV_PORT", "PUBLIC_GATEWAY_URL", "SSR_TIMEOUT_MS"]
+    },
+    "start": {
+      "dependsOn": ["build"],
+      "cache": false,
+      "persistent": true,
+      "passThroughEnv": ["PORT", "HOST", "CLIENT_DEV_PORT", "PUBLIC_GATEWAY_URL", "SSR_TIMEOUT_MS"]
+    }
+  }
+}

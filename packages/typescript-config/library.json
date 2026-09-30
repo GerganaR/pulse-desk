@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "./node.json",
+  "compilerOptions": {
+    // Isomorphic packages run in the browser and in Node, so they may use DOM-free
+    // web platform globals only. `types: []` keeps Node globals out of reach.
+    "lib": ["ES2023"],
+    "types": []
+  }
+}

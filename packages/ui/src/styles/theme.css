@@ -1,0 +1,213 @@
+/*
+ * PulseDesk design tokens.
+ *
+ * Components use *semantic* tokens only (bg-surface, text-fg-muted, border-line …).
+ * Light/dark switching happens here by swapping variable values, so component code
+ * never needs `dark:` variants. `data-theme` on <html> overrides the OS preference.
+ *
+ * Consumers: `@import "tailwindcss"; @import "@pulsedesk/ui/theme.css";`
+ * and add `@source` for this package so its class names are generated.
+ */
+
+@theme inline {
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, "SF Mono", Menlo, monospace;
+
+  --color-canvas: var(--pd-canvas);
+  --color-surface: var(--pd-surface);
+  --color-surface-muted: var(--pd-surface-muted);
+  --color-surface-hover: var(--pd-surface-hover);
+  --color-line: var(--pd-line);
+  --color-line-strong: var(--pd-line-strong);
+
+  --color-fg: var(--pd-fg);
+  --color-fg-muted: var(--pd-fg-muted);
+  --color-fg-subtle: var(--pd-fg-subtle);
+  --color-fg-inverse: var(--pd-fg-inverse);
+
+  --color-accent: var(--pd-accent);
+  --color-accent-hover: var(--pd-accent-hover);
+  --color-accent-soft: var(--pd-accent-soft);
+  --color-accent-fg: var(--pd-accent-fg);
+
+  --color-live: var(--pd-live);
+  --color-live-soft: var(--pd-live-soft);
+  --color-warning: var(--pd-warning);
+  --color-warning-soft: var(--pd-warning-soft);
+  --color-danger: var(--pd-danger);
+  --color-danger-soft: var(--pd-danger-soft);
+  --color-info: var(--pd-info);
+  --color-info-soft: var(--pd-info-soft);
+
+  --color-focus: var(--pd-focus);
+
+  --shadow-card: var(--pd-shadow-card);
+  --shadow-overlay: var(--pd-shadow-overlay);
+
+  --animate-pulse-ring: pulse-ring 2s cubic-bezier(0.2, 0.6, 0.4, 1) infinite;
+  --animate-fade-in: fade-in 160ms ease-out both;
+  --animate-shimmer: shimmer 1.6s ease-in-out infinite;
+
+  @keyframes pulse-ring {
+    0% {
+      transform: scale(1);
+      opacity: 0.55;
+    }
+    80%,
+    100% {
+      transform: scale(2.4);
+      opacity: 0;
+    }
+  }
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+      transform: translateY(2px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  @keyframes shimmer {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.55;
+    }
+  }
+}
+
+@layer base {
+  :root {
+    color-scheme: light;
+    --pd-canvas: oklch(0.982 0.003 264);
+    --pd-surface: oklch(1 0 0);
+    --pd-surface-muted: oklch(0.967 0.004 264);
+    --pd-surface-hover: oklch(0.955 0.005 264);
+    --pd-line: oklch(0.918 0.006 264);
+    --pd-line-strong: oklch(0.86 0.008 264);
+
+    --pd-fg: oklch(0.2 0.015 264);
+    --pd-fg-muted: oklch(0.45 0.015 264);
+    --pd-fg-subtle: oklch(0.58 0.012 264);
+    --pd-fg-inverse: oklch(0.985 0.002 264);
+
+    --pd-accent: oklch(0.52 0.19 272);
+    --pd-accent-hover: oklch(0.47 0.19 272);
+    --pd-accent-soft: oklch(0.95 0.03 272);
+    --pd-accent-fg: oklch(0.99 0 0);
+
+    --pd-live: oklch(0.6 0.15 158);
+    --pd-live-soft: oklch(0.95 0.04 158);
+    --pd-warning: oklch(0.62 0.14 65);
+    --pd-warning-soft: oklch(0.96 0.045 80);
+    --pd-danger: oklch(0.56 0.2 25);
+    --pd-danger-soft: oklch(0.96 0.025 25);
+    --pd-info: oklch(0.56 0.14 240);
+    --pd-info-soft: oklch(0.95 0.025 240);
+
+    --pd-focus: oklch(0.6 0.19 272);
+
+    --pd-shadow-card: 0 1px 2px oklch(0.2 0.02 264 / 0.05), 0 0 0 1px oklch(0.2 0.02 264 / 0.02);
+    --pd-shadow-overlay:
+      0 12px 32px -8px oklch(0.2 0.02 264 / 0.18), 0 0 0 1px oklch(0.2 0.02 264 / 0.06);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --pd-canvas: oklch(0.155 0.008 264);
+      --pd-surface: oklch(0.19 0.009 264);
+      --pd-surface-muted: oklch(0.215 0.01 264);
+      --pd-surface-hover: oklch(0.235 0.011 264);
+      --pd-line: oklch(0.27 0.011 264);
+      --pd-line-strong: oklch(0.34 0.012 264);
+
+      --pd-fg: oklch(0.955 0.004 264);
+      --pd-fg-muted: oklch(0.74 0.01 264);
+      --pd-fg-subtle: oklch(0.6 0.01 264);
+      --pd-fg-inverse: oklch(0.18 0.01 264);
+
+      --pd-accent: oklch(0.68 0.16 272);
+      --pd-accent-hover: oklch(0.74 0.14 272);
+      --pd-accent-soft: oklch(0.28 0.06 272);
+      --pd-accent-fg: oklch(0.16 0.02 272);
+
+      --pd-live: oklch(0.74 0.15 158);
+      --pd-live-soft: oklch(0.28 0.05 158);
+      --pd-warning: oklch(0.8 0.13 75);
+      --pd-warning-soft: oklch(0.29 0.05 75);
+      --pd-danger: oklch(0.7 0.17 25);
+      --pd-danger-soft: oklch(0.29 0.06 25);
+      --pd-info: oklch(0.72 0.12 240);
+      --pd-info-soft: oklch(0.28 0.05 240);
+
+      --pd-focus: oklch(0.72 0.15 272);
+
+      --pd-shadow-card: 0 0 0 1px oklch(1 0 0 / 0.02);
+      --pd-shadow-overlay: 0 16px 40px -8px oklch(0 0 0 / 0.6), 0 0 0 1px oklch(1 0 0 / 0.06);
+    }
+  }
+
+  /* Explicit override mirrors the dark block above; keep them in sync. */
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --pd-canvas: oklch(0.155 0.008 264);
+    --pd-surface: oklch(0.19 0.009 264);
+    --pd-surface-muted: oklch(0.215 0.01 264);
+    --pd-surface-hover: oklch(0.235 0.011 264);
+    --pd-line: oklch(0.27 0.011 264);
+    --pd-line-strong: oklch(0.34 0.012 264);
+    --pd-fg: oklch(0.955 0.004 264);
+    --pd-fg-muted: oklch(0.74 0.01 264);
+    --pd-fg-subtle: oklch(0.6 0.01 264);
+    --pd-fg-inverse: oklch(0.18 0.01 264);
+    --pd-accent: oklch(0.68 0.16 272);
+    --pd-accent-hover: oklch(0.74 0.14 272);
+    --pd-accent-soft: oklch(0.28 0.06 272);
+    --pd-accent-fg: oklch(0.16 0.02 272);
+    --pd-live: oklch(0.74 0.15 158);
+    --pd-live-soft: oklch(0.28 0.05 158);
+    --pd-warning: oklch(0.8 0.13 75);
+    --pd-warning-soft: oklch(0.29 0.05 75);
+    --pd-danger: oklch(0.7 0.17 25);
+    --pd-danger-soft: oklch(0.29 0.06 25);
+    --pd-info: oklch(0.72 0.12 240);
+    --pd-info-soft: oklch(0.28 0.05 240);
+    --pd-focus: oklch(0.72 0.15 272);
+    --pd-shadow-card: 0 0 0 1px oklch(1 0 0 / 0.02);
+    --pd-shadow-overlay: 0 16px 40px -8px oklch(0 0 0 / 0.6), 0 0 0 1px oklch(1 0 0 / 0.06);
+  }
+
+  html {
+    font-family: var(--font-sans);
+    font-feature-settings: "cv11", "ss01";
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    background-color: var(--color-canvas);
+    color: var(--color-fg);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-focus);
+    outline-offset: 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
