@@ -22,13 +22,31 @@
     "dev": {
       "cache": false,
       "persistent": true,
-      "passThroughEnv": ["PORT", "HOST", "CLIENT_DEV_PORT", "PUBLIC_GATEWAY_URL", "SSR_TIMEOUT_MS"]
+      "passThroughEnv": [
+        "PORT",
+        "HOST",
+        "CLIENT_DEV_PORT",
+        "PUBLIC_GATEWAY_URL",
+        "SSR_TIMEOUT_MS",
+        "SSR_DATA_BUDGET_MS",
+        "MOCK_LATENCY_MS",
+        "MOCK_FAILURE_RATE"
+      ]
     },
     "start": {
       "dependsOn": ["build"],
       "cache": false,
       "persistent": true,
-      "passThroughEnv": ["PORT", "HOST", "CLIENT_DEV_PORT", "PUBLIC_GATEWAY_URL", "SSR_TIMEOUT_MS"]
+      "passThroughEnv": [
+        "PORT",
+        "HOST",
+        "CLIENT_DEV_PORT",
+        "PUBLIC_GATEWAY_URL",
+        "SSR_TIMEOUT_MS",
+        "SSR_DATA_BUDGET_MS",
+        "MOCK_LATENCY_MS",
+        "MOCK_FAILURE_RATE"
+      ]
     }
   }
 }

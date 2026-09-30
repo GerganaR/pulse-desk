@@ -14,11 +14,24 @@ export {
   type ConnectionIndicatorProps,
   type ConnectionStatus,
 } from "./components/ConnectionIndicator.tsx";
+export {
+  DropdownMenu,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  type DropdownMenuItemProps,
+  type DropdownMenuProps,
+  type DropdownMenuRadioGroupProps,
+  type DropdownMenuRadioItemProps,
+} from "./components/DropdownMenu.tsx";
 export { EmptyState, type EmptyStateProps } from "./components/EmptyState.tsx";
 export { ErrorState, type ErrorStateProps } from "./components/ErrorState.tsx";
 export { Input, Textarea, type InputProps, type TextareaProps } from "./components/Input.tsx";
 export { Panel, type PanelProps } from "./components/Panel.tsx";
 export { Skeleton, type SkeletonProps } from "./components/Skeleton.tsx";
 export { Spinner, type SpinnerProps } from "./components/Spinner.tsx";
+export { StatTile, type StatTileProps } from "./components/StatTile.tsx";
 export { StatusBadge, type StatusBadgeProps } from "./components/StatusBadge.tsx";
 export { StatusDot, type StatusDotProps } from "./components/StatusDot.tsx";

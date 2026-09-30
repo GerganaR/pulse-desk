@@ -1,0 +1,8 @@
+{
+  "extends": "@pulsedesk/typescript-config/library.json",
+  "compilerOptions": {
+    // RTK's thunk signal/abort types reference AbortSignal from the DOM lib.
+    "lib": ["ES2023", "DOM"]
+  },
+  "include": ["src"]
+}

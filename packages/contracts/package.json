@@ -3,9 +3,12 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "sideEffects": false,
+  "sideEffects": [
+    "./src/csp-safe.ts"
+  ],
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./csp-safe": "./src/csp-safe.ts"
   },
   "scripts": {
     "lint": "eslint .",

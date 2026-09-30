@@ -40,6 +40,8 @@
   --color-info-soft: var(--pd-info-soft);
 
   --color-focus: var(--pd-focus);
+  /* Data marks. Validated with the dataviz palette checks against both surfaces. */
+  --color-chart: var(--pd-chart);
 
   --shadow-card: var(--pd-shadow-card);
   --shadow-overlay: var(--pd-shadow-overlay);
@@ -110,6 +112,7 @@
     --pd-info-soft: oklch(0.95 0.025 240);
 
     --pd-focus: oklch(0.6 0.19 272);
+    --pd-chart: oklch(0.52 0.19 272);
 
     --pd-shadow-card: 0 1px 2px oklch(0.2 0.02 264 / 0.05), 0 0 0 1px oklch(0.2 0.02 264 / 0.02);
     --pd-shadow-overlay:
@@ -146,6 +149,7 @@
       --pd-info-soft: oklch(0.28 0.05 240);
 
       --pd-focus: oklch(0.72 0.15 272);
+      --pd-chart: oklch(0.64 0.16 272);
 
       --pd-shadow-card: 0 0 0 1px oklch(1 0 0 / 0.02);
       --pd-shadow-overlay: 0 16px 40px -8px oklch(0 0 0 / 0.6), 0 0 0 1px oklch(1 0 0 / 0.06);
@@ -178,6 +182,7 @@
     --pd-info: oklch(0.72 0.12 240);
     --pd-info-soft: oklch(0.28 0.05 240);
     --pd-focus: oklch(0.72 0.15 272);
+    --pd-chart: oklch(0.64 0.16 272);
     --pd-shadow-card: 0 0 0 1px oklch(1 0 0 / 0.02);
     --pd-shadow-overlay: 0 16px 40px -8px oklch(0 0 0 / 0.6), 0 0 0 1px oklch(1 0 0 / 0.06);
   }

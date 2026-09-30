@@ -1,4 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { selectSessionById } from "@pulsedesk/state";
+import { matchPath } from "react-router";
+import { THEME_COOKIE, parseThemePreference } from "@/app/theme";
 import {
   BOOTSTRAP_GLOBAL,
   type AssetManifest,
@@ -6,14 +9,20 @@ import {
   type PublicConfig,
 } from "@/lib/bootstrap";
 import { serializeForScript } from "@/lib/serialize";
+import { readCookie } from "./cookies";
+import type { SessionsSource } from "./data/sessions-source";
 import { render, resolveRouteHandle } from "./entry-server";
 import { errorFields, log } from "./log";
+import { prefetchForRequest } from "./prefetch";
 import { contentSecurityPolicy, createNonce, setSecurityHeaders } from "./security";
 
 export interface SsrContext {
   assets: AssetManifest;
   publicConfig: PublicConfig;
   timeoutMs: number;
+  /** Max time SSR waits for data before streaming a loading state instead. */
+  dataBudgetMs: number;
+  sessions: SessionsSource;
   assetOrigins: string[];
   connectOrigins: string[];
 }
@@ -21,7 +30,7 @@ export interface SsrContext {
 /**
  * Streaming SSR for a single page request.
  *
- *   request ─► route handle (redirect / status) ─► renderToPipeableStream
+ *   request ─► route handle (redirect / status) ─► prefetch (budgeted) ─► renderToPipeableStream
  *                                                     │
  *                     onShellReady ◄──────────────────┤  headers + stream the shell
  *                     onShellError ◄──────────────────┤  static 500 document
@@ -31,7 +40,11 @@ export interface SsrContext {
  * The render is aborted if it exceeds `timeoutMs` (pending Suspense boundaries then
  * finish on the client) or if the client disconnects mid-stream.
  */
-export function handlePageRequest(req: IncomingMessage, res: ServerResponse, ctx: SsrContext) {
+export async function handlePageRequest(
+  req: IncomingMessage,
+  res: ServerResponse,
+  ctx: SsrContext,
+) {
   const url = new URL(req.url ?? "/", "http://localhost");
   const route = resolveRouteHandle(url.pathname);
 
@@ -41,21 +54,44 @@ export function handlePageRequest(req: IncomingMessage, res: ServerResponse, ctx
     return;
   }
 
-  const nonce = createNonce();
-  const bootstrap: BootstrapData = { assets: ctx.assets, config: ctx.publicConfig };
   const startedAt = performance.now();
+  const { store, completed } = await prefetchForRequest(ctx.sessions, ctx.dataBudgetMs);
+  if (!completed)
+    log.warn("ssr.data_budget_exceeded", { path: url.pathname, budgetMs: ctx.dataBudgetMs });
+  if (res.destroyed) return; // client went away while we were loading data
+
+  // A session URL that doesn't exist in loaded data is a real 404, not a 200 with an empty page.
+  let status = route.status;
+  const sessionRoute = matchPath("/sessions/:sessionId", url.pathname);
+  if (sessionRoute && store.getState().sessions.status === "ready") {
+    if (!selectSessionById(store.getState(), sessionRoute.params.sessionId ?? "")) status = 404;
+  }
+
+  const now = Date.now();
+  const theme = parseThemePreference(readCookie(req.headers.cookie, THEME_COOKIE));
+  const nonce = createNonce();
+  const bootstrap: BootstrapData = {
+    assets: ctx.assets,
+    config: ctx.publicConfig,
+    preloadedState: store.getState(),
+    serverNow: now,
+    theme,
+  };
   let shellErrored = false;
   let renderErrored = false;
 
   const { pipe, abort } = render({
     url: url.pathname + url.search,
     assets: ctx.assets,
+    store,
+    now,
+    theme,
     nonce,
     bootstrapScripts: ctx.assets.scripts,
     bootstrapScriptContent: `window.${BOOTSTRAP_GLOBAL}=${serializeForScript(bootstrap)}`,
 
     onShellReady() {
-      res.statusCode = renderErrored ? 500 : route.status;
+      res.statusCode = renderErrored ? 500 : status;
       res.setHeader("Content-Type", "text/html; charset=utf-8");
       // Pages contain live, per-request data; never let intermediaries cache them.
       res.setHeader("Cache-Control", "no-store");

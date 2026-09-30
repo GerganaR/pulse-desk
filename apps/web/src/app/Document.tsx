@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import type { AssetManifest } from "@/lib/bootstrap";
+import { useTheme } from "./theme";
 
 export interface DocumentProps {
   assets: AssetManifest;
@@ -14,8 +15,10 @@ export interface DocumentProps {
  * deduplicated and ordered by React.
  */
 export function Document({ assets, children }: DocumentProps) {
+  const { theme } = useTheme();
   return (
-    <html lang="en">
+    // "system" leaves the attribute off so the CSS media query decides.
+    <html lang="en" data-theme={theme === "system" ? undefined : theme}>
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />

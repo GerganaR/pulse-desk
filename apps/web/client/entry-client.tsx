@@ -1,18 +1,24 @@
+// Must stay the first import: configures Zod before any schema module evaluates.
+import "@pulsedesk/contracts/csp-safe";
 import "@fontsource-variable/inter";
 import "@fontsource-variable/jetbrains-mono";
 import "../src/styles/app.css";
 
+import { createPulseStore } from "@pulsedesk/state";
 import { hydrateRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router";
 import { App } from "@/app/App";
 import { Root } from "@/app/Root";
 import { readBootstrapData } from "@/lib/bootstrap";
+import { createHttpApi } from "@/lib/http-api";
 
-const { assets } = readBootstrapData();
+const { assets, preloadedState, serverNow, theme } = readBootstrapData();
+
+const store = createPulseStore({ preloadedState, extra: { api: createHttpApi() } });
 
 hydrateRoot(
   document,
-  <Root assets={assets}>
+  <Root assets={assets} store={store} now={serverNow} theme={theme}>
     <BrowserRouter>
       <App />
     </BrowserRouter>

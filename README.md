@@ -5,9 +5,10 @@ explore resilient realtime frontend architecture. It combines WebSocket-driven s
 updates, streamed AI responses, Node.js streaming SSR, Redux Toolkit state management, and
 a pnpm/Turborepo monorepo built with Rspack.
 
-> **Status:** under active, incremental development. Phase 1 (foundation) is complete:
-> monorepo, shared contracts, design system, and custom streaming SSR with Rspack.
-> This README is expanded as each phase lands.
+> **Status:** under active, incremental development. Phases 1–2 are complete: monorepo,
+> shared contracts, design system, custom streaming SSR with Rspack, Redux domain layer,
+> dashboard, sessions list and session detail (on generated data until the realtime
+> gateway lands in Phase 3). This README is expanded as each phase lands.
 
 ## Running locally
 
@@ -40,6 +41,8 @@ apps/
     src/               app shell, pages, components
 packages/
   contracts/           Zod schemas + inferred types: realtime events, WS protocol, DTOs
+  state/               Redux Toolkit domain layer (framework-agnostic): slices, selectors
+  test-utils/          Seeded, deterministic session factories for tests and mocks
   ui/                  Design system: tokens (Tailwind v4 @theme) and accessible components
   typescript-config/   Shared strict tsconfig presets
   eslint-config/       Shared flat ESLint config (type-aware, react-hooks, jsx-a11y)
@@ -54,4 +57,19 @@ watch-order coupling from the task graph.
 
 ## Architecture decisions
 
+- [ADR-002: Redux state boundaries](docs/adr/002-redux-state-boundaries.md)
 - [ADR-003: Custom streaming SSR](docs/adr/003-ssr-architecture.md)
+
+## Environment variables (web)
+
+| Variable             | Default                  | Purpose                                                |
+| -------------------- | ------------------------ | ------------------------------------------------------ |
+| `PORT`               | `3000`                   | SSR server port                                        |
+| `CLIENT_DEV_PORT`    | `3001`                   | Dev asset server (HMR)                                 |
+| `SSR_DATA_BUDGET_MS` | `250`                    | Max time SSR waits for data before streaming skeletons |
+| `MOCK_LATENCY_MS`    | `40`                     | Simulated latency of the temporary session source      |
+| `MOCK_FAILURE_RATE`  | `0`                      | Probability (0–1) the session source fails             |
+| `PUBLIC_GATEWAY_URL` | `ws://localhost:4000/ws` | Realtime gateway (Phase 3)                             |
+
+Try the degraded paths: `MOCK_LATENCY_MS=1500 pnpm dev` shows streamed skeletons and a
+client-side load; `MOCK_FAILURE_RATE=1 pnpm dev` shows the error state and retry.

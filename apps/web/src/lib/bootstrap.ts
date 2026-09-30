@@ -1,3 +1,6 @@
+import type { RootState } from "@pulsedesk/state";
+import type { ThemePreference } from "@/app/theme";
+
 /**
  * Data the server hands to the client at hydration time, embedded as
  * `window.__PULSEDESK__` via React's `bootstrapScriptContent`.
@@ -21,6 +24,14 @@ export interface PublicConfig {
 export interface BootstrapData {
   assets: AssetManifest;
   config: PublicConfig;
+  /** Redux state produced during SSR; the client store starts from exactly this. */
+  preloadedState: Partial<RootState>;
+  /**
+   * The server's clock at render time. Time-relative UI ("8s ago") renders with this
+   * during hydration so markup matches, then switches to the browser clock.
+   */
+  serverNow: number;
+  theme: ThemePreference;
 }
 
 declare global {

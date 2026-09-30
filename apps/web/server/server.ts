@@ -1,6 +1,8 @@
 import http, { type IncomingMessage, type ServerResponse } from "node:http";
 import sirv from "sirv";
 import { serverConfig as config } from "./config";
+import { handleApiRequest } from "./api";
+import { createMockSessionsSource } from "./data/mock-sessions-source";
 import { errorFields, log } from "./log";
 import { ManifestNotReadyError, createManifestLoader } from "./manifest";
 import { handlePageRequest } from "./ssr";
@@ -28,6 +30,8 @@ const connectOrigins = [
   ...(config.isProd ? [] : [config.clientDevOrigin.replace(/^http/, "ws")]),
 ];
 
+const sessions = createMockSessionsSource(config.mock);
+
 function notFound(res: ServerResponse) {
   res.statusCode = 404;
   res.end("Not found");
@@ -36,10 +40,12 @@ function notFound(res: ServerResponse) {
 async function renderPage(req: IncomingMessage, res: ServerResponse) {
   try {
     const assets = await getManifest();
-    handlePageRequest(req, res, {
+    await handlePageRequest(req, res, {
       assets,
       publicConfig: config.publicConfig,
       timeoutMs: config.ssrTimeoutMs,
+      dataBudgetMs: config.ssrDataBudgetMs,
+      sessions,
       assetOrigins,
       connectOrigins,
     });
@@ -64,6 +70,8 @@ function onRequest(req: IncomingMessage, res: ServerResponse) {
     res.end(JSON.stringify({ status: "ok", uptimeSeconds: Math.round(process.uptime()) }));
     return;
   }
+
+  if (handleApiRequest(req, res, pathname, { sessions })) return;
 
   if (req.method !== "GET" && req.method !== "HEAD") {
     res.writeHead(405, { Allow: "GET, HEAD" });
