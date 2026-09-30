@@ -185,9 +185,10 @@ test.describe("Reliability", () => {
   test("added latency shows Degraded, and removing it recovers", async ({ page }) => {
     await openActiveSession(page);
     const panel = await openPanel(page);
-    await panel.getByText("1.5 s", { exact: true }).click();
+    const latency = panel.getByRole("group", { name: "Latency" });
+    await latency.getByText("1.5 s", { exact: true }).click();
     await expect(indicator(page)).toHaveAttribute("data-status", "degraded", { timeout: 10_000 });
-    await panel.getByText("Off", { exact: true }).click();
+    await latency.getByText("Off", { exact: true }).click();
     await expect(indicator(page)).toHaveAttribute("data-status", "live", { timeout: 10_000 });
   });
 });

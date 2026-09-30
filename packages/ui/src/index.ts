@@ -44,3 +44,13 @@ export {
   type ToastViewportProps,
 } from "./components/Toast.tsx";
 export { Tooltip, type TooltipProps, type TooltipTriggerProps } from "./components/Tooltip.tsx";
+export {
+  Tab,
+  TabList,
+  TabPanel,
+  Tabs,
+  type TabListProps,
+  type TabPanelProps,
+  type TabProps,
+  type TabsProps,
+} from "./components/Tabs.tsx";

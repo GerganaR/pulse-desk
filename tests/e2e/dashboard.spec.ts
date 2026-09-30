@@ -49,7 +49,8 @@ test.describe("Dashboard", () => {
 
     await expect(page).toHaveURL(href!);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(name ?? "");
-    await expect(page.getByRole("region", { name: "Session" })).toBeVisible();
+    // Activity is the default panel at every width (below `xl` the others are tabs).
+    await expect(page.getByRole("region", { name: "Live activity" })).toBeVisible();
   });
 });
 

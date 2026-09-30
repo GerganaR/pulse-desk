@@ -1,3 +1,4 @@
+import type { AIFault } from "@pulsedesk/contracts";
 import type { RealtimeClient, RealtimeClientStats } from "@pulsedesk/realtime-client";
 import type { FaultInjector } from "@pulsedesk/realtime-client/fault-injection";
 import { selectConnection } from "@pulsedesk/state";
@@ -5,6 +6,7 @@ import { Badge, Button, Dialog, Input, Tooltip, cx } from "@pulsedesk/ui";
 import { Copy, Shuffle, Trash2, Unplug, Plug, Wrench } from "lucide-react";
 import { useEffect, useId, useState, useSyncExternalStore, type ReactNode } from "react";
 import { useAppSelector } from "@/app/hooks";
+import { useAIFaults } from "@/features/copilot/AIFaultsProvider";
 import { toIndicatorStatus } from "@/features/realtime/LiveConnectionIndicator";
 import { useFaultInjector, useRealtimeClient } from "@/features/realtime/RealtimeProvider";
 import { useNow } from "@/lib/clock";
@@ -21,6 +23,13 @@ import { formatLatency, formatRelative } from "@/lib/format";
 const MARKER = "pulsedesk-devtools";
 
 const LATENCY_OPTIONS = [0, 250, 1_500, 3_000] as const;
+
+const AI_FAULT_OPTIONS: readonly { value: AIFault | null; label: string }[] = [
+  { value: null, label: "Off" },
+  { value: "timeout", label: "Timeout" },
+  { value: "http_500", label: "Error 500" },
+  { value: "slow", label: "Slow" },
+];
 
 function useClientStats(client: RealtimeClient) {
   const [stats, setStats] = useState<RealtimeClientStats>(() => client.getStats());
@@ -131,7 +140,6 @@ function FaultControls({ faults, client }: { faults: FaultInjector; client: Real
   const state = useSyncExternalStore(faults.subscribe, faults.getState, faults.getState);
   const [dropCount, setDropCount] = useState(3);
   const dropId = useId();
-  const latencyName = useId();
 
   return (
     <section aria-labelledby="devtools-faults" className="border-b border-line px-4 py-2">
@@ -170,38 +178,19 @@ function FaultControls({ faults, client }: { faults: FaultInjector; client: Real
         )}
       </ControlRow>
 
-      <fieldset className="pt-3 pb-2">
-        <legend className="text-sm text-fg">Latency</legend>
-        <p className="text-xs text-fg-muted">
-          Delays every inbound frame. Above {formatLatency(1_000)} the connection shows Degraded.
-        </p>
-        <div className="mt-2 inline-flex rounded-lg border border-line bg-surface-muted p-0.5">
-          {LATENCY_OPTIONS.map((ms) => (
-            <label
-              key={ms}
-              className={cx(
-                "cursor-pointer rounded-md px-2.5 py-1 text-xs font-medium has-focus-visible:outline-2 has-focus-visible:outline-focus",
-                state.latencyMs === ms
-                  ? "bg-surface text-fg shadow-card"
-                  : "text-fg-muted hover:text-fg",
-              )}
-            >
-              <input
-                type="radio"
-                name={latencyName}
-                value={ms}
-                checked={state.latencyMs === ms}
-                onChange={() => {
-                  faults.setLatency(ms);
-                  client.checkConnection(); // measure the new RTT now, not at the next beat
-                }}
-                className="sr-only"
-              />
-              {ms === 0 ? "Off" : formatLatency(ms)}
-            </label>
-          ))}
-        </div>
-      </fieldset>
+      <Segmented
+        legend="Latency"
+        description={`Delays every inbound frame. Above ${formatLatency(1_000)} the connection shows Degraded.`}
+        options={LATENCY_OPTIONS.map((ms) => ({
+          value: ms,
+          label: ms === 0 ? "Off" : formatLatency(ms),
+        }))}
+        value={state.latencyMs}
+        onChange={(ms) => {
+          faults.setLatency(ms);
+          client.checkConnection(); // measure the new RTT now, not at the next beat
+        }}
+      />
 
       <ControlRow
         title="Drop events"
@@ -262,6 +251,80 @@ function FaultControls({ faults, client }: { faults: FaultInjector; client: Real
   );
 }
 
+/** Segmented radio group styled like the latency control. */
+function Segmented<T>({
+  legend,
+  description,
+  options,
+  value,
+  onChange,
+}: {
+  legend: string;
+  description: ReactNode;
+  options: readonly { value: T; label: string }[];
+  value: T;
+  onChange: (value: T) => void;
+}) {
+  const name = useId();
+  return (
+    <fieldset className="pt-3 pb-2">
+      <legend className="text-sm text-fg">{legend}</legend>
+      <p className="text-xs text-fg-muted">{description}</p>
+      <div className="mt-2 inline-flex rounded-lg border border-line bg-surface-muted p-0.5">
+        {options.map((option) => (
+          <label
+            key={option.label}
+            className={cx(
+              "cursor-pointer rounded-md px-2.5 py-1 text-xs font-medium has-focus-visible:outline-2 has-focus-visible:outline-focus",
+              value === option.value
+                ? "bg-surface text-fg shadow-card"
+                : "text-fg-muted hover:text-fg",
+            )}
+          >
+            <input
+              type="radio"
+              name={name}
+              checked={value === option.value}
+              onChange={() => onChange(option.value)}
+              className="sr-only"
+            />
+            {option.label}
+          </label>
+        ))}
+      </div>
+    </fieldset>
+  );
+}
+
+/**
+ * AI faults are server behaviour (ai-service's timeouts, the proxy's error path), so the
+ * selection travels with each copilot request as a header instead of wrapping a transport.
+ */
+function AIFaultControls() {
+  const faults = useAIFaults();
+  const noop = () => () => {};
+  const selected = useSyncExternalStore(
+    faults?.subscribe ?? noop,
+    () => faults?.get() ?? null,
+    () => null,
+  );
+  if (!faults) return null;
+  return (
+    <section aria-labelledby="devtools-ai" className="border-b border-line px-4 pb-2">
+      <h3 id="devtools-ai" className="sr-only">
+        AI copilot faults
+      </h3>
+      <Segmented
+        legend="AI copilot"
+        description="Applies to new copilot requests. The live connection is unaffected."
+        options={AI_FAULT_OPTIONS}
+        value={selected}
+        onChange={(fault) => faults.set(fault)}
+      />
+    </section>
+  );
+}
+
 function FaultLog({ faults }: { faults: FaultInjector }) {
   const log = useSyncExternalStore(faults.subscribe, faults.getLog, faults.getLog);
   const now = useNow();
@@ -298,7 +361,7 @@ export default function ReliabilityPanel() {
         aria-haspopup="dialog"
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}
-        className="fixed bottom-4 left-4 z-40 inline-flex h-8 items-center gap-1.5 rounded-full border border-line bg-surface px-3 text-xs font-medium text-fg-muted shadow-overlay hover:text-fg"
+        className="fixed bottom-4 left-4 z-40 max-lg:top-[4.25rem] max-lg:right-4 max-lg:bottom-auto max-lg:left-auto inline-flex h-8 items-center gap-1.5 rounded-full border border-line bg-surface px-3 text-xs font-medium text-fg-muted shadow-overlay hover:text-fg"
       >
         <Wrench aria-hidden="true" className="size-3.5" />
         Reliability
@@ -315,6 +378,7 @@ export default function ReliabilityPanel() {
         {faults ? (
           <>
             <FaultControls faults={faults} client={client} />
+            <AIFaultControls />
             <FaultLog faults={faults} />
           </>
         ) : (

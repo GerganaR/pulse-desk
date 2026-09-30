@@ -73,5 +73,5 @@ is still incomplete, and we need _ordered, reliable_ delivery anyway.
   bound, hence the `bufferedAmount` limit and slow-consumer disconnect.
 - **The AI copilot uses a different transport.** It's request/response streaming of one
   answer, which fits a streamed HTTP response (NDJSON over `fetch`) better: cancellation
-  via `AbortController`, no socket state, and independence from the live feed. That is
-  Phase 5, and it will get its own ADR.
+  via `AbortController`, no socket state, and independence from the live feed. See
+  [ADR-004](004-ndjson-for-ai-streaming.md).

@@ -5,12 +5,14 @@ explore resilient realtime frontend architecture. It combines WebSocket-driven s
 updates, streamed AI responses, Node.js streaming SSR, Redux Toolkit state management, and
 a pnpm/Turborepo monorepo built with Rspack.
 
-> **Status:** under active, incremental development. Phases 1–4 are complete: monorepo,
+> **Status:** under active, incremental development. Phases 1–5 are complete: monorepo,
 > shared contracts, design system, custom streaming SSR with Rspack, Redux domain layer,
 > dashboard and session views, the realtime stack (WebSocket gateway, event simulator,
-> realtime client), and realtime reliability (heartbeat, gap detection and resync,
-> dedupe, reorder buffer, backpressure, a dev fault-injection panel). This README is
-> expanded as each phase lands.
+> realtime client), realtime reliability (heartbeat, gap detection and resync, dedupe,
+> reorder buffer, backpressure, a dev fault-injection panel), and the AI copilot (an AI
+> service with a mock and an OpenAI-compatible provider, NDJSON streaming with cancel,
+> retry and timeouts, a lazy-loaded copilot panel). This README is expanded as each
+> phase lands.
 
 ## Running locally
 
@@ -20,7 +22,7 @@ Requires **Node 24** (see `.nvmrc`) and pnpm (via Corepack).
 nvm use            # or install Node 24.x
 corepack enable
 pnpm install
-pnpm dev           # web, realtime gateway and event simulator → http://localhost:3000
+pnpm dev           # web, realtime gateway, event simulator, ai-service → http://localhost:3000
 ```
 
 | Command               | What it does                                                                        |
@@ -41,8 +43,9 @@ apps/
   web/                 React 19 app: Rspack client + server builds, streaming SSR
     client/            entry-client.tsx (hydrateRoot)
     server/            HTTP server, SSR pipeline, CSP, asset manifest, gateway client
-    src/               app shell, pages, features (sessions, dashboard, realtime)
+    src/               app shell, pages, features (sessions, dashboard, realtime, copilot)
   realtime-gateway/    Node WebSocket gateway: sequencing, replay buffer, snapshots, presence
+  ai-service/          AI copilot backend: provider abstraction (mock, OpenAI-compatible), NDJSON streaming
   event-simulator/     Believable visitor traffic, posted to the gateway's ingest API
 packages/
   contracts/           Zod schemas + inferred types: realtime events, WS protocol, DTOs
@@ -81,11 +84,31 @@ injects faults into the live connection: disconnect/reconnect, latency, dropped,
 duplicated and reordered events. It isn't in production builds, and CI proves it.
 Details: [docs/realtime-reliability.md](docs/realtime-reliability.md).
 
+## AI copilot
+
+The session page has a copilot next to the live timeline (a tab on smaller screens).
+Quick actions (summarise, what's blocking, suggest a reply, unusual behaviour, key
+events) or a free-form question stream an answer in, with Cancel, Retry and a partial
+answer kept on failure. Several answers can stream at once, and the WebSocket is
+unaffected throughout.
+
+- The browser only names the session; the web server builds the model's context with
+  `toAIContext()`, a unit-tested privacy boundary (no ids, names, city or timestamps).
+- `POST /api/ai/chat` streams NDJSON from ai-service through the web server; cancelling
+  aborts the provider end to end. Time limits apply to the first token and the whole answer.
+- The default provider is a deterministic mock grounded in the session data;
+  `AI_PROVIDER=openai` switches to a real model.
+- In dev, the Reliability panel can make the copilot time out, fail with a 500 or stream
+  slowly.
+
+Details: [docs/ai-copilot.md](docs/ai-copilot.md).
+
 ## Architecture decisions
 
 - [ADR-001: WebSocket for realtime updates (not SSE or polling)](docs/adr/001-websocket-vs-sse.md)
 - [ADR-002: Redux state boundaries](docs/adr/002-redux-state-boundaries.md)
 - [ADR-003: Custom streaming SSR](docs/adr/003-ssr-architecture.md)
+- [ADR-004: NDJSON over fetch for AI streaming](docs/adr/004-ndjson-for-ai-streaming.md)
 
 ## Environment variables
 
@@ -100,6 +123,7 @@ Each service reads its own variables; `pnpm dev` passes them through Turborepo.
 | `GATEWAY_HTTP_URL`   | `http://localhost:4000`  | Gateway HTTP API used server-side (SSR, `/api/sessions`) |
 | `PUBLIC_GATEWAY_URL` | `ws://localhost:4000/ws` | Gateway WebSocket URL handed to the browser              |
 | `SSR_DATA_BUDGET_MS` | `250`                    | Max time SSR waits for data before streaming skeletons   |
+| `AI_SERVICE_URL`     | `http://localhost:4100`  | ai-service, called server-side by `/api/ai/chat`         |
 
 **realtime-gateway**
 
@@ -112,6 +136,20 @@ Each service reads its own variables; `pnpm dev` passes them through Turborepo.
 | `LOG_LEVEL`          | `info`   | `debug` logs every handshake and rejected ingest          |
 | `MAX_BUFFERED_BYTES` | 8 MiB    | Per-socket send backlog before a slow consumer is dropped |
 | `PRESENCE_GRACE_MS`  | `5000`   | How long a disconnected viewer stays "viewing"            |
+
+**ai-service**
+
+| Variable                    | Default                     | Purpose                                                            |
+| --------------------------- | --------------------------- | ------------------------------------------------------------------ |
+| `AI_SERVICE_PORT`           | `4100`                      | HTTP port                                                          |
+| `AI_PROVIDER`               | `mock`                      | `mock` or `openai` (any OpenAI-compatible endpoint)                |
+| `OPENAI_API_KEY`            | —                           | Required with `AI_PROVIDER=openai`; never reaches the browser      |
+| `OPENAI_MODEL`              | —                           | Required with `AI_PROVIDER=openai`                                 |
+| `OPENAI_BASE_URL`           | `https://api.openai.com/v1` | Chat Completions endpoint                                          |
+| `AI_FIRST_TOKEN_TIMEOUT_MS` | `10000`                     | No first token by then → `timeout` error in the stream             |
+| `AI_TOTAL_TIMEOUT_MS`       | `45000`                     | Hard limit for one answer                                          |
+| `AI_MOCK_TOKEN_MS`          | `35`                        | Mock provider pacing per token                                     |
+| `AI_DEBUG`                  | off (`1` in `pnpm dev`)     | Dev fault injection and `/debug/requests/:id`. Never in production |
 
 **event-simulator**
 

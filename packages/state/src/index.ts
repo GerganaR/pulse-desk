@@ -7,3 +7,4 @@ export * from "./sessions/sessions.selectors.ts";
 export * from "./timeline/timeline.slice.ts";
 export * from "./presence/presence.slice.ts";
 export * from "./notifications/notifications.slice.ts";
+export * from "./ai/ai.slice.ts";

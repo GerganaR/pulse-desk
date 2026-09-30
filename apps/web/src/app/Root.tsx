@@ -5,6 +5,7 @@ import type { AssetManifest, PublicConfig } from "@/lib/bootstrap";
 import { ClockProvider } from "@/lib/clock";
 import { ConfigProvider } from "./config";
 import { Document } from "./Document";
+import { AIFaultsProvider } from "@/features/copilot/AIFaultsProvider";
 import { RealtimeProvider } from "@/features/realtime/RealtimeProvider";
 import { ThemeProvider, type ThemePreference } from "./theme";
 
@@ -30,11 +31,13 @@ export function Root({ assets, config, store, now, theme, children }: RootProps)
       <ConfigProvider config={config}>
         <ReduxProvider store={store}>
           <RealtimeProvider>
-            <ClockProvider now={now}>
-              <ThemeProvider initial={theme}>
-                <Document assets={assets}>{children}</Document>
-              </ThemeProvider>
-            </ClockProvider>
+            <AIFaultsProvider>
+              <ClockProvider now={now}>
+                <ThemeProvider initial={theme}>
+                  <Document assets={assets}>{children}</Document>
+                </ThemeProvider>
+              </ClockProvider>
+            </AIFaultsProvider>
           </RealtimeProvider>
         </ReduxProvider>
       </ConfigProvider>

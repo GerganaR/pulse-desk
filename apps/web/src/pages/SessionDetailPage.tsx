@@ -7,12 +7,17 @@ import {
   ErrorState,
   Panel,
   Skeleton,
+  Tab,
+  TabList,
+  TabPanel,
+  Tabs,
   buttonStyles,
 } from "@pulsedesk/ui";
 import { Activity, ChevronLeft, RotateCw, SearchX } from "lucide-react";
 import { Link, useParams } from "react-router";
 import { useAppSelector } from "@/app/hooks";
 import { PageHeader } from "@/components/PageHeader";
+import { Copilot } from "@/features/copilot/Copilot";
 import { useWatchSession } from "@/features/realtime/RealtimeProvider";
 import {
   SessionDetailsPanel,
@@ -52,6 +57,10 @@ function TimelineSkeleton() {
     </div>
   );
 }
+
+/** Tab panels below `xl` (only the active one shown, tall enough to work in); columns above. */
+const panelClass =
+  "flex min-h-0 flex-col h-[max(26rem,calc(100dvh-20rem))] lg:h-[max(28rem,calc(100dvh-17rem))] max-xl:data-[state=inactive]:hidden xl:h-auto [&>section]:flex-1";
 
 export function SessionDetailPage() {
   const { sessionId = "" } = useParams();
@@ -145,20 +154,39 @@ export function SessionDetailPage() {
         description={<span className="font-mono">{sessionId}</span>}
         actions={<SessionViewers viewers={viewers} />}
       />
-      <div className="grid gap-4 lg:h-[calc(100dvh-13.5rem)] lg:min-h-[32rem] lg:grid-cols-[22rem_minmax(0,1fr)] lg:gap-6">
-        {session ? <SessionDetailsPanel session={session} /> : <SessionDetailsPanelSkeleton />}
-        <Panel
-          title="Live activity"
-          headingId="session-activity-heading"
-          meta={events.length > 0 ? <Badge>{countVisibleEvents(events)}</Badge> : undefined}
-          className="h-[32rem] lg:h-auto"
-          bodyClassName="overflow-hidden"
-        >
-          <div aria-busy={history === "loading" || undefined} className="h-full">
-            {activity}
-          </div>
-        </Panel>
-      </div>
+      {/*
+        Three columns on wide screens; below that, one panel at a time behind tabs. Every
+        panel stays mounted either way (forceMount), so switching tabs keeps the timeline's
+        scroll position and never interrupts an answer that is streaming.
+      */}
+      <Tabs defaultValue="activity">
+        <TabList aria-label="Session views" className="mb-4 xl:hidden">
+          <Tab value="details">Details</Tab>
+          <Tab value="activity">Activity</Tab>
+          <Tab value="copilot">Copilot</Tab>
+        </TabList>
+        <div className="grid grid-cols-1 xl:h-[calc(100dvh-13.5rem)] xl:min-h-[34rem] xl:grid-cols-[16rem_minmax(0,1fr)_minmax(0,1fr)] 2xl:grid-cols-[18rem_minmax(0,1.2fr)_minmax(0,1fr)] xl:gap-5">
+          <TabPanel value="details" forceMount className={panelClass}>
+            {session ? <SessionDetailsPanel session={session} /> : <SessionDetailsPanelSkeleton />}
+          </TabPanel>
+          <TabPanel value="activity" forceMount className={panelClass}>
+            <Panel
+              title="Live activity"
+              headingId="session-activity-heading"
+              meta={events.length > 0 ? <Badge>{countVisibleEvents(events)}</Badge> : undefined}
+              className="h-full"
+              bodyClassName="overflow-hidden"
+            >
+              <div aria-busy={history === "loading" || undefined} className="h-full">
+                {activity}
+              </div>
+            </Panel>
+          </TabPanel>
+          <TabPanel value="copilot" forceMount className={panelClass}>
+            <Copilot sessionId={sessionId} className="h-full" />
+          </TabPanel>
+        </div>
+      </Tabs>
     </>
   );
 }

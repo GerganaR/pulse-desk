@@ -11,8 +11,8 @@ file in the same PR.
 | 2     | Dashboard, sessions list, session detail (on generated data)       | ✅ Done |
 | 3     | Realtime: gateway, simulator, realtime client, Redux wiring        | ✅ Done |
 | 4     | Reliability: reconnect, replay, heartbeat, fault injection         | ✅ Done |
-| 5     | AI copilot: service, HTTP streaming, copilot UI                    | Next    |
-| 6     | AI quality: evaluation, hallucination regressions, AI workflow     |         |
+| 5     | AI copilot: service, HTTP streaming, copilot UI                    | ✅ Done |
+| 6     | AI quality: evaluation, hallucination regressions, AI workflow     | Next    |
 | 7     | Performance: batching at scale, virtualisation, splitting, budgets |         |
 | 8     | Testing: gap-filling, a11y automation, CI for the full stack       |         |
 | 9     | Documentation: README, architecture, ADRs, demo script             |         |
@@ -82,6 +82,32 @@ Changes made during Phase 4:
 16. **The reliability panel is non-modal.** It docks bottom-left over the details column
     (a bottom sheet on mobile), so the timeline stays visible while faults are injected.
     `Dialog` supports both modes on the native `<dialog>` element.
+
+Changes made during Phase 5:
+
+17. **AI faults are enacted by the real services, not a client wrapper** (a deliberate
+    exception to item 13). The faults that matter are server behaviour: ai-service's
+    time limits and the proxy's error mapping. The panel's choice travels as an
+    `x-pulsedesk-ai-fault` header, forwarded only by devtools web builds and honoured only
+    by an ai-service started with `AI_DEBUG=1`. E2E checks that the production build
+    ignores it. `AI_DEBUG` also exposes recent request outcomes, which is how E2E proves
+    a cancel reached the provider.
+18. **The web server builds the AI context, not the browser.** The browser sends
+    `{requestId, sessionId, action, prompt}`; the proxy loads the session from the gateway
+    and runs `toAIContext()` (in `contracts`). ai-service re-validates it with strict
+    schemas. A client can't forge or widen what reaches a model.
+19. **Each question is independent.** No conversation history is sent to the model; the
+    conversation is a per-session list in the tab's store. It keeps requests small and
+    answers grounded in current data. Multi-turn context can come later if it earns it.
+20. **"AI summaries generated" became "AI answers · generated in this tab".** There's no
+    server-side count to show, and a per-tab count labelled as global would mislead.
+21. **Session layout: three columns from `xl` (1280 px), tabs below.** At `lg` the
+    activity column was too narrow to read. Activity is the default tab, and every panel
+    stays mounted, so switching tabs never interrupts a stream or loses scroll position.
+22. **The copilot renders after hydration, not on the server.** It's interactive only,
+    so SSR renders a same-size skeleton and the lazy chunk loads in the browser.
+23. **Answers outlive the page.** The runner is per tab, so navigating away doesn't
+    cancel an answer; it's there when you come back.
 
 ## Ports and processes (target for `pnpm dev`)
 
@@ -329,6 +355,34 @@ cancel, retry, timeout and failure handled cleanly and independently of the WebS
 
 Demo steps 12–17 from the brief work in one continuous take.
 
+### Outcome
+
+Delivered as planned, with the adjustments above (items 17–23). Details, flow, time
+limits and test map: [ai-copilot.md](ai-copilot.md); wire format:
+[ADR-004](adr/004-ndjson-for-ai-streaming.md).
+
+- The brief's demo script isn't in the repository, so "demo steps 12–17" were checked as
+  the flow they describe, in one browser session: ask (quick action and free text) →
+  progressive answer → several at once → cancel mid-stream → 500 → retry → timeout,
+  with the connection Live throughout. That flow is also the E2E spec.
+- E2E: 6 copilot tests, each on desktop and mobile; with the dashboard spec, 110/110
+  over 5 repeats. Cancellation is
+  mutation-checked end to end: removing ai-service's abort-on-disconnect fails the
+  cancel test. Unit-level guards (abort race, `AI_DEBUG` gate) were mutation-checked too.
+- The browser check found real layout bugs, all fixed: an implicit grid column let the
+  quick-action row widen the mobile page past the viewport; the mobile panel height hid
+  the composer; chips overflowed with no scroll affordance (they wrap now); the dev
+  Reliability toggle covered the mobile composer (it docks in the mobile header now);
+  and the activity column was too narrow at 1280 px.
+- Initial JS grew 3.6 KB gzipped (140.8 → 144.5 KB): about 1 KB is the Rspack
+  chunk-loading runtime, needed now that production has its first lazy chunk; the rest
+  is the `ai` slice, `Tabs`, the copilot shell and the stat tile. The copilot itself is
+  a 5.7 KB lazy chunk. Budget warning stays on; see [performance.md](performance.md).
+- The OpenAI-compatible provider is unit-tested against a fake stream only; it hasn't
+  been run against a live API here.
+- One unexplained failure in `realtime-gateway` tests during a cold full run (didn't
+  recur in 3 isolated runs or the next full run). Tracked below.
+
 ---
 
 ## Phase 6 — AI quality and AI-assisted workflow
@@ -469,13 +523,16 @@ a mid-range profile, and the results are recorded.
 
 ### Carried-over items
 
-| Item                                                              | From    | Planned in     |
-| ----------------------------------------------------------------- | ------- | -------------- |
-| Client entry over the 350 KB budget (Zod is the main contributor) | Phase 2 | Phase 7        |
-| Dev metrics view in the reliability panel (panel exists now)      | Phase 4 | Phase 7        |
-| Adaptive heartbeat thresholds (relative to normal RTT)            | Phase 4 | Phase 10       |
-| Delete generated mock session source                              | Phase 2 | Phase 3        |
-| Commit Phases 1–2                                                 | Phase 2 | Before Phase 3 |
+| Item                                                                | From    | Planned in            |
+| ------------------------------------------------------------------- | ------- | --------------------- |
+| Client entry over the 350 KB budget (Zod is the main contributor)   | Phase 2 | Phase 7               |
+| Dev metrics view in the reliability panel (panel exists now)        | Phase 4 | Phase 7               |
+| Adaptive heartbeat thresholds (relative to normal RTT)              | Phase 4 | Phase 10              |
+| Run the OpenAI-compatible provider against a live API (`pnpm eval`) | Phase 5 | Phase 6               |
+| One-off `realtime-gateway` test failure under full parallel run     | Phase 5 | Phase 8 (flake audit) |
+| AI metrics in the dev metrics view (`aiMetricsSink` exists)         | Phase 5 | Phase 7               |
+| Delete generated mock session source                                | Phase 2 | Phase 3               |
+| Commit Phases 1–2                                                   | Phase 2 | Before Phase 3        |
 
 ### Risks
 

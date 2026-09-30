@@ -51,6 +51,8 @@
   --animate-shimmer: shimmer 1.6s ease-in-out infinite;
   /* Events replayed after a reconnect: a tint that fades, so they're noticeable once. */
   --animate-replay-highlight: replay-highlight 4s ease-out both;
+  /* The copilot's cursor while an answer streams. */
+  --animate-caret-blink: caret-blink 1.1s step-end infinite;
 
   @keyframes pulse-ring {
     0% {
@@ -80,6 +82,11 @@
     }
     100% {
       background-color: transparent;
+    }
+  }
+  @keyframes caret-blink {
+    50% {
+      opacity: 0;
     }
   }
   @keyframes shimmer {

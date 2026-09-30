@@ -22,6 +22,7 @@ export type MetricName =
   | "gateway.broadcast.duration"
   | "gateway.backpressure.disconnects"
   | "ai.request.duration"
+  | "ai.request.first_token"
   | "ai.request.cancelled"
   | "ai.request.failed"
   | "session.timeline.render.duration";

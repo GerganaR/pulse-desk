@@ -47,7 +47,21 @@
         "SESSION_COUNT",
         "EVENT_RATE",
         "ERROR_RATE",
-        "SEED"
+        "SEED",
+        "AI_SERVICE_URL",
+        "AI_SERVICE_PORT",
+        "AI_SERVICE_HOST",
+        "AI_PROVIDER",
+        "OPENAI_API_KEY",
+        "OPENAI_MODEL",
+        "OPENAI_BASE_URL",
+        "AI_FIRST_TOKEN_TIMEOUT_MS",
+        "AI_TOTAL_TIMEOUT_MS",
+        "AI_MOCK_TOKEN_MS",
+        "AI_MOCK_FIRST_TOKEN_MS",
+        "AI_SLOW_TOKEN_MS",
+        "AI_MAX_CONCURRENT_STREAMS",
+        "AI_DEBUG"
       ]
     },
     "start": {
@@ -73,7 +87,21 @@
         "SESSION_COUNT",
         "EVENT_RATE",
         "ERROR_RATE",
-        "SEED"
+        "SEED",
+        "AI_SERVICE_URL",
+        "AI_SERVICE_PORT",
+        "AI_SERVICE_HOST",
+        "AI_PROVIDER",
+        "OPENAI_API_KEY",
+        "OPENAI_MODEL",
+        "OPENAI_BASE_URL",
+        "AI_FIRST_TOKEN_TIMEOUT_MS",
+        "AI_TOTAL_TIMEOUT_MS",
+        "AI_MOCK_TOKEN_MS",
+        "AI_MOCK_FIRST_TOKEN_MS",
+        "AI_SLOW_TOKEN_MS",
+        "AI_MAX_CONCURRENT_STREAMS",
+        "AI_DEBUG"
       ]
     }
   }

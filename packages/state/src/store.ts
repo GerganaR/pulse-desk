@@ -1,4 +1,5 @@
 import { combineReducers, configureStore } from "@reduxjs/toolkit";
+import { aiSlice } from "./ai/ai.slice.ts";
 import type { ThunkExtra } from "./api.ts";
 import { notificationsSlice } from "./notifications/notifications.slice.ts";
 import { presenceSlice } from "./presence/presence.slice.ts";
@@ -12,6 +13,7 @@ export const rootReducer = combineReducers({
   [presenceSlice.reducerPath]: presenceSlice.reducer,
   [connectionSlice.reducerPath]: connectionSlice.reducer,
   [notificationsSlice.reducerPath]: notificationsSlice.reducer,
+  [aiSlice.reducerPath]: aiSlice.reducer,
 });
 
 export type RootState = ReturnType<typeof rootReducer>;

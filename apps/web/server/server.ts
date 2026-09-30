@@ -71,7 +71,7 @@ function onRequest(req: IncomingMessage, res: ServerResponse) {
     return;
   }
 
-  if (handleApiRequest(req, res, pathname, { sessions })) return;
+  if (handleApiRequest(req, res, pathname, { sessions, aiServiceUrl: config.aiServiceUrl })) return;
 
   if (req.method !== "GET" && req.method !== "HEAD") {
     res.writeHead(405, { Allow: "GET, HEAD" });
@@ -109,7 +109,10 @@ server.listen(config.port, config.host, () => {
     mode: config.isProd ? "production" : "development",
   });
   // `pnpm dev` starts the gateway alongside this server, so give it a moment first.
-  setTimeout(() => void checkGateway(), 3_000).unref();
+  setTimeout(() => {
+    void checkGateway();
+    void checkAIService();
+  }, 3_000).unref();
 });
 
 /**
@@ -128,6 +131,22 @@ async function checkGateway() {
       url: config.gatewayHttpUrl,
       ...errorFields(error),
       hint: "Session data comes from the realtime gateway. Run `pnpm dev` from the repository root (it starts web, gateway and simulator), or set GATEWAY_HTTP_URL.",
+    });
+  }
+}
+
+/** Same idea for the copilot: without ai-service, only the copilot panel fails. */
+async function checkAIService() {
+  try {
+    const response = await fetch(`${config.aiServiceUrl}/healthz`, {
+      signal: AbortSignal.timeout(2_000),
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  } catch (error) {
+    log.warn("ai_service.unreachable", {
+      url: config.aiServiceUrl,
+      ...errorFields(error),
+      hint: "The AI copilot calls ai-service. `pnpm dev` starts it, or set AI_SERVICE_URL.",
     });
   }
 }

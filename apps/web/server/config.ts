@@ -24,6 +24,8 @@ export const serverConfig = {
   ssrDataBudgetMs: Number(process.env.SSR_DATA_BUDGET_MS ?? 250),
   /** Realtime gateway HTTP API, called server-side for SSR and /api/sessions. */
   gatewayHttpUrl: process.env.GATEWAY_HTTP_URL ?? "http://localhost:4000",
+  /** AI service, called server-side only: the browser talks to /api/ai/chat. */
+  aiServiceUrl: process.env.AI_SERVICE_URL ?? "http://localhost:4100",
 
   /** Origin of the Rspack dev server that serves client assets in development. */
   clientDevOrigin: `http://localhost:${process.env.CLIENT_DEV_PORT ?? 3001}`,

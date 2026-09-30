@@ -39,6 +39,27 @@ banner, toasts and the notifications slice. The reliability panel, fault injecto
 `check-devtools-excluded.ts` verifies in CI. The budget warning stays on and the limit
 unchanged. Phase 7 owns bringing it back under.
 
+## Phase 5 delta
+
+Same method. The gzipped column is bytes ÷ 1024 (as in the Phase 4 table); the
+minified column is bytes ÷ 1000.
+
+| Build               | Initial JS (minified) | Gzipped     |
+| ------------------- | --------------------- | ----------- |
+| Phase 4 (`a563503`) | 464.0 KB              | 140.9 KB    |
+| Phase 5             | 474.7 KB              | 144.5 KB    |
+| **Delta**           | **+10.7 KB**          | **+3.6 KB** |
+
+By chunk: the Rspack runtime grew 1.1 KB gzipped. Production now has its first lazy
+chunk, so the runtime includes chunk loading, which later route splitting reuses. `main`
+grew 2.5 KB: the `ai` slice and selectors, `Tabs`, the copilot panel shell and skeleton,
+the fault-switch context (an always-`null` provider in production) and the AI answers tile.
+
+The copilot itself (conversation UI, streaming client, NDJSON reader, runner, AI
+schemas) is a **lazy chunk of 14.2 KB minified / 5.7 KB gzipped**, loaded after hydration
+on the session page only. None of it is in the initial bundle, which was checked by
+searching the initial chunks for its strings.
+
 ### Known opportunities (to be evaluated in Phase 7)
 
 1. **Zod on the client.** Full Zod is used only to validate network input. Zod 4's
@@ -46,4 +67,4 @@ unchanged. Phase 7 owns bringing it back under.
    rewriting `packages/contracts` schemas, which are shared with the Node services.
 2. **Route-level code splitting** with `React.lazy`: the session detail page (and, from
    Phase 5, the AI copilot) don't need to be in the dashboard's initial load.
-3. **Lazy AI copilot** once it exists.
+3. ~~Lazy AI copilot~~: done in Phase 5 (5.7 KB gzipped chunk).

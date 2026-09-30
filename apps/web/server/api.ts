@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { handleAIChat } from "./ai-proxy";
 import type { SessionsSource } from "./data/sessions-source";
 import { errorFields, log } from "./log";
 
@@ -15,9 +16,23 @@ export function handleApiRequest(
   req: IncomingMessage,
   res: ServerResponse,
   pathname: string,
-  deps: { sessions: SessionsSource },
+  deps: { sessions: SessionsSource; aiServiceUrl: string },
 ): boolean {
   if (!pathname.startsWith("/api/")) return false;
+
+  if (pathname === "/api/ai/chat" && req.method === "POST") {
+    handleAIChat(req, res, {
+      sessions: deps.sessions,
+      aiServiceUrl: deps.aiServiceUrl,
+      // Build-time constant: production builds never forward the fault header.
+      forwardFaults: __DEVTOOLS__,
+    }).catch((error: unknown) => {
+      log.error("api.ai_chat_failed", errorFields(error));
+      if (!res.headersSent) sendJson(res, 500, { error: "Internal server error" });
+      else res.end();
+    });
+    return true;
+  }
 
   const controller = new AbortController();
   res.on("close", () => controller.abort()); // browser went away → stop upstream work
