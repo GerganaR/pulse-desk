@@ -22,11 +22,9 @@ export const serverConfig = {
   ssrTimeoutMs: Number(process.env.SSR_TIMEOUT_MS ?? 10_000),
   /** How long SSR waits for data before streaming skeletons and loading client-side. */
   ssrDataBudgetMs: Number(process.env.SSR_DATA_BUDGET_MS ?? 250),
-  /** Mock session source knobs (replaced by the realtime gateway in Phase 3). */
-  mock: {
-    latencyMs: Number(process.env.MOCK_LATENCY_MS ?? 40),
-    failureRate: Number(process.env.MOCK_FAILURE_RATE ?? 0),
-  },
+  /** Realtime gateway HTTP API, called server-side for SSR and /api/sessions. */
+  gatewayHttpUrl: process.env.GATEWAY_HTTP_URL ?? "http://localhost:4000",
+
   /** Origin of the Rspack dev server that serves client assets in development. */
   clientDevOrigin: `http://localhost:${process.env.CLIENT_DEV_PORT ?? 3001}`,
   publicConfig: {

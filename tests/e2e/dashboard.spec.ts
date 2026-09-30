@@ -39,14 +39,15 @@ test.describe("Dashboard", () => {
 
   test("opens a session from the recent list", async ({ page }) => {
     await page.goto("/dashboard");
-    const recent = page
-      .getByRole("heading", { name: "Recent sessions" })
-      .locator("xpath=ancestor::div[contains(@class,'rounded-xl')]");
-    const firstLink = recent.getByRole("listitem").first().getByRole("link");
-    const name = await firstLink.textContent();
-    await firstLink.click();
+    // The list re-orders live: pin the exact session before clicking, or the locator
+    // could re-resolve to a different row between reading and clicking.
+    const firstLink = page.locator('a[href^="/sessions/ses_"]').first();
+    const href = await firstLink.getAttribute("href");
+    const pinned = page.locator(`a[href="${href}"]`).first();
+    const name = await pinned.textContent();
+    await pinned.click();
 
-    await expect(page).toHaveURL(/\/sessions\/ses_/);
+    await expect(page).toHaveURL(href!);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(name ?? "");
     await expect(page.getByRole("region", { name: "Session" })).toBeVisible();
   });

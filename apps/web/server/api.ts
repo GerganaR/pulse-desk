@@ -8,8 +8,8 @@ function sendJson(res: ServerResponse, status: number, body: unknown) {
 }
 
 /**
- * Same-origin API for the browser (a thin backend-for-frontend). Returns true when the
- * request was handled.
+ * Same-origin API for the browser (a thin backend-for-frontend over the gateway).
+ * Returns true when the request was handled.
  */
 export function handleApiRequest(
   req: IncomingMessage,
@@ -19,17 +19,32 @@ export function handleApiRequest(
 ): boolean {
   if (!pathname.startsWith("/api/")) return false;
 
+  const controller = new AbortController();
+  res.on("close", () => controller.abort()); // browser went away → stop upstream work
+  const fail = (event: string) => (error: unknown) => {
+    if (controller.signal.aborted) return;
+    log.error(event, errorFields(error));
+    sendJson(res, 503, { error: "Session service unavailable" });
+  };
+
   if (pathname === "/api/sessions" && req.method === "GET") {
-    const controller = new AbortController();
-    res.on("close", () => controller.abort());
     deps.sessions
       .getSnapshot(controller.signal)
       .then((snapshot) => sendJson(res, 200, snapshot))
-      .catch((error: unknown) => {
-        if (controller.signal.aborted) return;
-        log.error("api.sessions_failed", errorFields(error));
-        sendJson(res, 503, { error: "Session service unavailable" });
-      });
+      .catch(fail("api.sessions_failed"));
+    return true;
+  }
+
+  const detail = /^\/api\/sessions\/([^/]+)$/.exec(pathname);
+  if (detail && req.method === "GET") {
+    deps.sessions
+      .getSessionDetail(decodeURIComponent(detail[1] ?? ""), controller.signal)
+      .then((snapshot) =>
+        snapshot
+          ? sendJson(res, 200, snapshot)
+          : sendJson(res, 404, { error: "Session not found" }),
+      )
+      .catch(fail("api.session_detail_failed"));
     return true;
   }
 

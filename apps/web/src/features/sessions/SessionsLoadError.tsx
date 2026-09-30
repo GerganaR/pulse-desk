@@ -11,7 +11,14 @@ export function SessionsLoadError({
   return (
     <ErrorState
       title="Couldn't load sessions"
-      description={error ?? "Something went wrong while loading session data."}
+      description={
+        <>
+          {error ?? "Something went wrong while loading session data."}
+          <span className="mt-1 block text-xs text-fg-subtle">
+            PulseDesk keeps reconnecting in the background and will update this page on its own.
+          </span>
+        </>
+      }
       action={
         <Button onClick={onRetry} leadingIcon={<RotateCw aria-hidden="true" className="size-4" />}>
           Try again

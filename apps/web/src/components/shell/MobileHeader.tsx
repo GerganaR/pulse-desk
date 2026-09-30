@@ -2,6 +2,7 @@ import { cx } from "@pulsedesk/ui";
 import { NavLink } from "react-router";
 import { BrandMark } from "./BrandMark";
 import { navItems } from "./nav-items";
+import { LiveConnectionIndicator } from "@/features/realtime/LiveConnectionIndicator";
 import { UserMenu } from "./UserMenu";
 
 /**
@@ -16,7 +17,10 @@ export function MobileHeader() {
         <NavLink to="/dashboard" aria-label="PulseDesk home" className="rounded-md">
           <BrandMark />
         </NavLink>
-        <UserMenu compact />
+        <div className="flex items-center gap-2">
+          <LiveConnectionIndicator />
+          <UserMenu compact />
+        </div>
       </div>
       <nav aria-label="Primary" className="-mb-px flex gap-1 overflow-x-auto px-3">
         {navItems.map(({ to, label }) => (

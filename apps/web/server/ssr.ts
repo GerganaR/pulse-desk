@@ -1,5 +1,4 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { selectSessionById } from "@pulsedesk/state";
 import { matchPath } from "react-router";
 import { THEME_COOKIE, parseThemePreference } from "@/app/theme";
 import {
@@ -55,17 +54,19 @@ export async function handlePageRequest(
   }
 
   const startedAt = performance.now();
-  const { store, completed } = await prefetchForRequest(ctx.sessions, ctx.dataBudgetMs);
+  const sessionRoute = matchPath("/sessions/:sessionId", url.pathname);
+  const { store, completed } = await prefetchForRequest(ctx.sessions, ctx.dataBudgetMs, {
+    sessionId: sessionRoute?.params.sessionId,
+  });
   if (!completed)
     log.warn("ssr.data_budget_exceeded", { path: url.pathname, budgetMs: ctx.dataBudgetMs });
   if (res.destroyed) return; // client went away while we were loading data
 
   // A session URL that doesn't exist in loaded data is a real 404, not a 200 with an empty page.
   let status = route.status;
-  const sessionRoute = matchPath("/sessions/:sessionId", url.pathname);
-  if (sessionRoute && store.getState().sessions.status === "ready") {
-    if (!selectSessionById(store.getState(), sessionRoute.params.sessionId ?? "")) status = 404;
-  }
+  const sessionId = sessionRoute?.params.sessionId;
+  if (sessionId && store.getState().timelines.bySession[sessionId]?.history === "missing")
+    status = 404;
 
   const now = Date.now();
   const theme = parseThemePreference(readCookie(req.headers.cookie, THEME_COOKIE));
@@ -83,6 +84,7 @@ export async function handlePageRequest(
   const { pipe, abort } = render({
     url: url.pathname + url.search,
     assets: ctx.assets,
+    config: ctx.publicConfig,
     store,
     now,
     theme,

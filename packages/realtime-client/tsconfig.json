@@ -1,0 +1,8 @@
+{
+  "extends": "@pulsedesk/typescript-config/library.json",
+  "compilerOptions": {
+    // Browser-first: the default transport is the platform WebSocket.
+    "lib": ["ES2023", "DOM"]
+  },
+  "include": ["src"]
+}

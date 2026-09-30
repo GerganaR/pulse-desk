@@ -17,10 +17,16 @@ function LocationProbe() {
 
 function renderPage(initialUrl = "/sessions") {
   const store = createPulseStore({
-    extra: { api: { fetchSessionsSnapshot: () => new Promise(() => {}) } },
+    extra: {
+      api: {
+        fetchSessionsSnapshot: () => new Promise(() => {}),
+        fetchSessionDetail: () => new Promise(() => {}),
+      },
+    },
   });
   store.dispatch(
     snapshotReceived({
+      streamId: "stream-1",
       sequence: 1,
       sessions: [
         makeSession({

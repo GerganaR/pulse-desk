@@ -10,7 +10,7 @@ import { hydrateRoot, type Root as ReactRoot } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { BrowserRouter, StaticRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { AssetManifest } from "@/lib/bootstrap";
+import type { AssetManifest, PublicConfig } from "@/lib/bootstrap";
 import { App } from "./App";
 import { Root } from "./Root";
 import { resolveRouteHandle } from "./routes";
@@ -20,7 +20,17 @@ const assets: AssetManifest = { scripts: [], styles: ["/assets/css/main.css"] };
 const SERVER_NOW = 1_760_000_000_000;
 const sessions = generateSessions({ now: SERVER_NOW, seed: 42 });
 
-const api: PulseApi = { fetchSessionsSnapshot: () => new Promise(() => {}) };
+const pending = () => new Promise<never>(() => {});
+const api: PulseApi = { fetchSessionsSnapshot: pending, fetchSessionDetail: pending };
+const config: PublicConfig = { gatewayUrl: "ws://gateway.test/ws", devTools: false };
+
+/** Inert WebSocket: hydration starts the realtime provider, but tests never touch the network. */
+class SilentWebSocket {
+  readyState = 0;
+  addEventListener() {}
+  send() {}
+  close() {}
+}
 
 function storeFrom(preloadedState?: Partial<RootState>) {
   return createPulseStore({ preloadedState, extra: { api } });
@@ -35,9 +45,9 @@ interface RenderInput {
 /** Mirrors server/ssr.ts: per-request store, server clock, then serialise state. */
 function serverRender({ url, theme = "system", loaded = true }: RenderInput) {
   const store = storeFrom();
-  if (loaded) store.dispatch(snapshotReceived({ sequence: 0, sessions }));
+  if (loaded) store.dispatch(snapshotReceived({ streamId: "stream-1", sequence: 0, sessions }));
   const html = renderToString(
-    <Root assets={assets} store={store} now={SERVER_NOW} theme={theme}>
+    <Root assets={assets} config={config} store={store} now={SERVER_NOW} theme={theme}>
       <StaticRouter location={url}>
         <App />
       </StaticRouter>
@@ -65,12 +75,19 @@ async function hydrateAt(
   preloadedState: RootState,
   theme: ThemePreference = "system",
 ) {
+  vi.stubGlobal("WebSocket", SilentWebSocket);
   window.history.replaceState(null, "", clientUrl);
   const recoverableErrors: unknown[] = [];
   await act(async () => {
     root = hydrateRoot(
       document,
-      <Root assets={assets} store={storeFrom(preloadedState)} now={SERVER_NOW} theme={theme}>
+      <Root
+        assets={assets}
+        config={config}
+        store={storeFrom(preloadedState)}
+        now={SERVER_NOW}
+        theme={theme}
+      >
         <BrowserRouter>
           <App />
         </BrowserRouter>
@@ -86,6 +103,7 @@ afterEach(() => {
   root = undefined;
   vi.useRealTimers();
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 describe("SSR hydration", () => {

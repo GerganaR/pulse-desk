@@ -1,4 +1,5 @@
 import { Badge } from "@pulsedesk/ui";
+import { LiveConnectionIndicator } from "@/features/realtime/LiveConnectionIndicator";
 import { UserMenu } from "./UserMenu";
 
 /** Desktop-only bar above page content: workspace context and account menu. */
@@ -9,7 +10,10 @@ export function TopBar() {
         <span className="font-medium text-fg">acme.example</span>
         <Badge>Production</Badge>
       </div>
-      <UserMenu />
+      <div className="flex items-center gap-3">
+        <LiveConnectionIndicator />
+        <UserMenu />
+      </div>
     </header>
   );
 }

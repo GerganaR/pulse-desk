@@ -1,9 +1,15 @@
 import { combineReducers, configureStore } from "@reduxjs/toolkit";
 import type { ThunkExtra } from "./api.ts";
+import { presenceSlice } from "./presence/presence.slice.ts";
+import { connectionSlice } from "./realtime/connection.slice.ts";
 import { sessionsSlice } from "./sessions/sessions.slice.ts";
+import { timelinesSlice } from "./timeline/timeline.slice.ts";
 
 export const rootReducer = combineReducers({
   [sessionsSlice.reducerPath]: sessionsSlice.reducer,
+  [timelinesSlice.reducerPath]: timelinesSlice.reducer,
+  [presenceSlice.reducerPath]: presenceSlice.reducer,
+  [connectionSlice.reducerPath]: connectionSlice.reducer,
 });
 
 export type RootState = ReturnType<typeof rootReducer>;

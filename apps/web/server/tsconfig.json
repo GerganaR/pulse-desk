@@ -1,0 +1,6 @@
+{
+  // Editor anchor: makes VS Code type-check this folder with the Node settings (no DOM
+  // lib) instead of an inferred default project. CI checks it via ../tsconfig.node.json.
+  "extends": "../tsconfig.node.json",
+  "include": ["."]
+}

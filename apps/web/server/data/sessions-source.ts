@@ -1,10 +1,11 @@
-import type { SessionsSnapshot } from "@pulsedesk/contracts";
+import type { SessionDetailSnapshot, SessionsSnapshot } from "@pulsedesk/contracts";
 
 /**
- * Where the web server gets session data for SSR and `/api/sessions`.
- * Phase 2 uses the mock below; the realtime gateway implementation replaces it without
- * any change to the UI or the store.
+ * Where the web server gets session data for SSR and the same-origin `/api/sessions*`
+ * endpoints. The UI and store depend only on this interface.
  */
 export interface SessionsSource {
   getSnapshot(signal?: AbortSignal): Promise<SessionsSnapshot>;
+  /** Resolves null when the session doesn't exist. */
+  getSessionDetail(sessionId: string, signal?: AbortSignal): Promise<SessionDetailSnapshot | null>;
 }

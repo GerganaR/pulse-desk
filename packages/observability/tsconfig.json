@@ -1,0 +1,4 @@
+{
+  "extends": "@pulsedesk/typescript-config/library.json",
+  "include": ["src"]
+}

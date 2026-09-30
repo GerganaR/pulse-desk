@@ -2,7 +2,7 @@ import http, { type IncomingMessage, type ServerResponse } from "node:http";
 import sirv from "sirv";
 import { serverConfig as config } from "./config";
 import { handleApiRequest } from "./api";
-import { createMockSessionsSource } from "./data/mock-sessions-source";
+import { createGatewaySessionsSource } from "./data/gateway-sessions-source";
 import { errorFields, log } from "./log";
 import { ManifestNotReadyError, createManifestLoader } from "./manifest";
 import { handlePageRequest } from "./ssr";
@@ -30,7 +30,7 @@ const connectOrigins = [
   ...(config.isProd ? [] : [config.clientDevOrigin.replace(/^http/, "ws")]),
 ];
 
-const sessions = createMockSessionsSource(config.mock);
+const sessions = createGatewaySessionsSource({ baseUrl: config.gatewayHttpUrl, timeoutMs: 3_000 });
 
 function notFound(res: ServerResponse) {
   res.statusCode = 404;
@@ -108,7 +108,29 @@ server.listen(config.port, config.host, () => {
     url: `http://localhost:${config.port}`,
     mode: config.isProd ? "production" : "development",
   });
+  // `pnpm dev` starts the gateway alongside this server, so give it a moment first.
+  setTimeout(() => void checkGateway(), 3_000).unref();
 });
+
+/**
+ * Startup diagnostic. The app works without the gateway (pages render an error state
+ * and the client keeps reconnecting), which makes a missing gateway easy to overlook:
+ * say so plainly in the log instead of leaving only 503s from /api/sessions.
+ */
+async function checkGateway() {
+  try {
+    const response = await fetch(`${config.gatewayHttpUrl}/healthz`, {
+      signal: AbortSignal.timeout(2_000),
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  } catch (error) {
+    log.warn("gateway.unreachable", {
+      url: config.gatewayHttpUrl,
+      ...errorFields(error),
+      hint: "Session data comes from the realtime gateway. Run `pnpm dev` from the repository root (it starts web, gateway and simulator), or set GATEWAY_HTTP_URL.",
+    });
+  }
+}
 
 // Graceful shutdown: stop accepting connections, let in-flight streams finish, and
 // force-exit if they don't within the grace period (e.g. a stuck SSR stream).

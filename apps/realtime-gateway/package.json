@@ -1,0 +1,29 @@
+{
+  "name": "@pulsedesk/realtime-gateway",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch --enable-source-maps src/main.ts",
+    "start": "node src/main.ts",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@pulsedesk/contracts": "workspace:*",
+    "@pulsedesk/observability": "workspace:*",
+    "ws": "^8.22.0"
+  },
+  "devDependencies": {
+    "@pulsedesk/eslint-config": "workspace:*",
+    "@pulsedesk/test-utils": "workspace:*",
+    "@pulsedesk/typescript-config": "workspace:*",
+    "@types/node": "^24.19.0",
+    "@types/ws": "^8.18.2",
+    "eslint": "^9.39.5",
+    "typescript": "~6.0.3",
+    "vitest": "^5.0.2",
+    "globals": "^17.12.0"
+  }
+}

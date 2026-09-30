@@ -1,4 +1,4 @@
-import { SessionsSnapshotSchema, decode } from "@pulsedesk/contracts";
+import { SessionDetailSnapshotSchema, SessionsSnapshotSchema, decode } from "@pulsedesk/contracts";
 import type { PulseApi } from "@pulsedesk/state";
 
 export class HttpError extends Error {
@@ -27,6 +27,22 @@ export function createHttpApi(baseUrl = ""): PulseApi {
         throw new HttpError(response.status, `Couldn't load sessions (HTTP ${response.status})`);
       }
       const result = decode(SessionsSnapshotSchema, await response.json());
+      if (!result.ok) throw new Error("Received malformed session data from the server");
+      return result.value;
+    },
+    async fetchSessionDetail(sessionId, signal) {
+      const response = await fetch(`${baseUrl}/api/sessions/${encodeURIComponent(sessionId)}`, {
+        signal,
+        headers: { Accept: "application/json" },
+      });
+      if (response.status === 404) return null;
+      if (!response.ok) {
+        throw new HttpError(
+          response.status,
+          `Couldn't load session activity (HTTP ${response.status})`,
+        );
+      }
+      const result = decode(SessionDetailSnapshotSchema, await response.json());
       if (!result.ok) throw new Error("Received malformed session data from the server");
       return result.value;
     },

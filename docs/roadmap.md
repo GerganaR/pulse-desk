@@ -9,8 +9,8 @@ file in the same PR.
 | ----- | ------------------------------------------------------------------ | ------- |
 | 1     | Foundation: monorepo, contracts, design system, streaming SSR      | ✅ Done |
 | 2     | Dashboard, sessions list, session detail (on generated data)       | ✅ Done |
-| 3     | Realtime: gateway, simulator, realtime client, Redux wiring        | Next    |
-| 4     | Reliability: reconnect, replay, heartbeat, fault injection         |         |
+| 3     | Realtime: gateway, simulator, realtime client, Redux wiring        | ✅ Done |
+| 4     | Reliability: reconnect, replay, heartbeat, fault injection         | Next    |
 | 5     | AI copilot: service, HTTP streaming, copilot UI                    |         |
 | 6     | AI quality: evaluation, hallucination regressions, AI workflow     |         |
 | 7     | Performance: batching at scale, virtualisation, splitting, budgets |         |
@@ -31,8 +31,23 @@ These changes come from what Phases 1–2 taught us:
    in the brief (`websocket.reconnect.count`, `ai.request.duration`, …) are emitted by
    Phase 3–5 code, so the API has to exist before then. Phase 7 fleshes it out.
 4. **Remaining UI primitives are built when first needed**, not up front:
-   `Toast` (Phase 3 notifications), `Dialog` and `Tooltip` (Phase 4 reliability panel),
+   `Toast` and `Dialog`/`Tooltip` (Phase 4 reliability panel and reconnect notices),
    `Tabs` (Phase 5 mobile session layout).
+
+Changes made during Phase 3:
+
+5. **Stream epochs (`streamId`) added to the protocol.** The in-memory gateway restarts
+   its sequences on every boot (including dev `--watch` reloads). Cursors are now
+   `{streamId, sequence}`, and a cursor from another epoch gets a fresh snapshot instead
+   of a silent gap. Verified by restarting the gateway under a connected browser.
+6. **Basic reconnect with backoff moved into Phase 3.** Without it, every gateway
+   reload in dev left the app dead. Phase 4 keeps heartbeat, degraded detection, gap
+   detection, reordering and fault injection.
+7. **Notifications/Toast deferred to Phase 4.** Phase 3 had no notification that
+   earned a toast; reconnect notices in Phase 4 are the first real use.
+8. **Client-side retention of ended sessions deferred to Phase 7.** The gateway ages
+   out ended sessions, but a long-lived tab keeps them until its next snapshot. It's a
+   memory and performance concern, so it gets measured with the load scenarios.
 
 ## Ports and processes (target for `pnpm dev`)
 

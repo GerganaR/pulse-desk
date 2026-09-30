@@ -115,10 +115,24 @@ export type RealtimeEvent = z.infer<typeof RealtimeEventSchema>;
 export type RealtimeEventType = RealtimeEvent["type"];
 export type RealtimeEventOf<T extends RealtimeEventType> = Extract<RealtimeEvent, { type: T }>;
 
-type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
+/**
+ * Event shape before the gateway assigns its stream position. Producers (the simulator,
+ * in production a browser SDK/collector) send these; only the gateway sets `sequence`.
+ */
+export const UnsequencedEventSchema = z.discriminatedUnion("type", [
+  SessionCreatedEventSchema.omit({ sequence: true }),
+  PageViewEventSchema.omit({ sequence: true }),
+  ClickEventSchema.omit({ sequence: true }),
+  FormOpenEventSchema.omit({ sequence: true }),
+  FormSubmitEventSchema.omit({ sequence: true }),
+  TypingEventSchema.omit({ sequence: true }),
+  SessionUpdatedEventSchema.omit({ sequence: true }),
+  SessionClosedEventSchema.omit({ sequence: true }),
+  PresenceJoinedEventSchema.omit({ sequence: true }),
+  PresenceLeftEventSchema.omit({ sequence: true }),
+]);
 
-/** Event shape before the gateway assigns stream position. Producers emit this. */
-export type UnsequencedEvent = DistributiveOmit<RealtimeEvent, "sequence">;
+export type UnsequencedEvent = z.infer<typeof UnsequencedEventSchema>;
 
 export const REALTIME_EVENT_TYPES = RealtimeEventSchema.options.map(
   (option) => option.shape.type.value,

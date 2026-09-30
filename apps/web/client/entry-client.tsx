@@ -12,13 +12,13 @@ import { Root } from "@/app/Root";
 import { readBootstrapData } from "@/lib/bootstrap";
 import { createHttpApi } from "@/lib/http-api";
 
-const { assets, preloadedState, serverNow, theme } = readBootstrapData();
+const { assets, config, preloadedState, serverNow, theme } = readBootstrapData();
 
 const store = createPulseStore({ preloadedState, extra: { api: createHttpApi() } });
 
 hydrateRoot(
   document,
-  <Root assets={assets} store={store} now={serverNow} theme={theme}>
+  <Root assets={assets} config={config} store={store} now={serverNow} theme={theme}>
     <BrowserRouter>
       <App />
     </BrowserRouter>

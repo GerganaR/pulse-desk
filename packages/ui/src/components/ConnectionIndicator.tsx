@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { cx } from "../lib/cx.ts";
 import type { Tone } from "./Badge.tsx";
 import { Spinner } from "./Spinner.tsx";
@@ -16,7 +17,7 @@ const presentation: Record<ConnectionStatus, { label: string; tone: Tone; classN
 export interface ConnectionIndicatorProps {
   status: ConnectionStatus;
   /** Secondary context, e.g. "retry in 4s" or "142 ms". Shown muted after the label. */
-  detail?: string;
+  detail?: ReactNode;
   className?: string;
 }
 

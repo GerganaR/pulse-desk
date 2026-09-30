@@ -14,12 +14,14 @@ import {
   selectStatusCounts,
   selectTopLivePages,
 } from "./sessions.selectors.ts";
-import { fetchSessionsSnapshot, snapshotReceived } from "./sessions.slice.ts";
+import { snapshotReceived } from "../realtime/realtime.actions.ts";
+import { fetchSessionsSnapshot } from "./sessions.slice.ts";
 
 const now = 1_760_000_000_000;
 const MIN = 60_000;
 
 const snapshot: SessionsSnapshot = {
+  streamId: "stream-1",
   sequence: 120,
   sessions: [
     makeSession({
@@ -58,6 +60,7 @@ const snapshot: SessionsSnapshot = {
 function storeWith(api: Partial<PulseApi> = {}) {
   const fullApi: PulseApi = {
     fetchSessionsSnapshot: vi.fn(async () => snapshot),
+    fetchSessionDetail: vi.fn(async () => null),
     ...api,
   };
   return { store: createPulseStore({ extra: { api: fullApi } }), api: fullApi };
@@ -109,7 +112,9 @@ describe("sessions slice", () => {
   it("replaces entities wholesale on a new snapshot (removed sessions disappear)", () => {
     const { store } = storeWith();
     store.dispatch(snapshotReceived(snapshot));
-    store.dispatch(snapshotReceived({ sequence: 130, sessions: [snapshot.sessions[0]!] }));
+    store.dispatch(
+      snapshotReceived({ streamId: "stream-1", sequence: 130, sessions: [snapshot.sessions[0]!] }),
+    );
     expect(store.getState().sessions.ids).toEqual(["a"]);
   });
 });

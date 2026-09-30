@@ -27,10 +27,19 @@
         "HOST",
         "CLIENT_DEV_PORT",
         "PUBLIC_GATEWAY_URL",
+        "GATEWAY_HTTP_URL",
         "SSR_TIMEOUT_MS",
         "SSR_DATA_BUDGET_MS",
-        "MOCK_LATENCY_MS",
-        "MOCK_FAILURE_RATE"
+        "GATEWAY_PORT",
+        "GATEWAY_HOST",
+        "REPLAY_BUFFER_SIZE",
+        "IDLE_AFTER_MS",
+        "CLOSE_AFTER_MS",
+        "LOG_LEVEL",
+        "SESSION_COUNT",
+        "EVENT_RATE",
+        "ERROR_RATE",
+        "SEED"
       ]
     },
     "start": {
@@ -42,10 +51,19 @@
         "HOST",
         "CLIENT_DEV_PORT",
         "PUBLIC_GATEWAY_URL",
+        "GATEWAY_HTTP_URL",
         "SSR_TIMEOUT_MS",
         "SSR_DATA_BUDGET_MS",
-        "MOCK_LATENCY_MS",
-        "MOCK_FAILURE_RATE"
+        "GATEWAY_PORT",
+        "GATEWAY_HOST",
+        "REPLAY_BUFFER_SIZE",
+        "IDLE_AFTER_MS",
+        "CLOSE_AFTER_MS",
+        "LOG_LEVEL",
+        "SESSION_COUNT",
+        "EVENT_RATE",
+        "ERROR_RATE",
+        "SEED"
       ]
     }
   }

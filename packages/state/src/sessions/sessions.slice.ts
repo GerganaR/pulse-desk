@@ -1,19 +1,24 @@
-import type { Session, SessionsSnapshot } from "@pulsedesk/contracts";
+import { projectSession, type Session, type SessionsSnapshot } from "@pulsedesk/contracts";
 import {
   createAsyncThunk,
   createEntityAdapter,
   createSlice,
   type EntityState,
-  type PayloadAction,
 } from "@reduxjs/toolkit";
 import type { ThunkExtra } from "../api.ts";
+import { eventsReceived, snapshotReceived } from "../realtime/realtime.actions.ts";
 
 export type LoadStatus = "idle" | "loading" | "ready" | "error";
 
 export interface SessionsState extends EntityState<Session, string> {
   status: LoadStatus;
   error: string | null;
-  /** Stream position the entities reflect; live events continue from sequence + 1. */
+  /** Stream epoch the entities belong to. */
+  streamId: string | null;
+  /**
+   * Stream position the entities reflect. Events at or below it are already included
+   * and are skipped, which makes applying an overlapping replay safe.
+   */
   sequence: number | null;
 }
 
@@ -27,6 +32,7 @@ export const sessionsAdapter = createEntityAdapter<Session>();
 export const initialSessionsState: SessionsState = sessionsAdapter.getInitialState({
   status: "idle",
   error: null,
+  streamId: null,
   sequence: null,
 });
 
@@ -36,17 +42,18 @@ export const fetchSessionsSnapshot = createAsyncThunk<
   { state: { sessions: SessionsState }; extra: ThunkExtra; rejectValue: string }
 >(
   "sessions/fetchSnapshot",
-  async (_, { extra, signal, rejectWithValue }) => {
+  async (_, { extra, signal, rejectWithValue, dispatch }) => {
     try {
-      return await extra.api.fetchSessionsSnapshot(signal);
+      const snapshot = await extra.api.fetchSessionsSnapshot(signal);
+      dispatch(snapshotReceived(snapshot));
+      return snapshot;
     } catch (error) {
       if (signal.aborted) throw error; // surfaces as meta.aborted, not a user-facing error
       return rejectWithValue(error instanceof Error ? error.message : "Failed to load sessions");
     }
   },
   {
-    // Prevent duplicate in-flight requests (e.g. StrictMode double effects, two
-    // components mounting at once).
+    // Prevent duplicate in-flight requests (StrictMode double effects, several consumers).
     condition: (_, { getState }) => getState().sessions.status !== "loading",
   },
 );
@@ -54,24 +61,33 @@ export const fetchSessionsSnapshot = createAsyncThunk<
 export const sessionsSlice = createSlice({
   name: "sessions",
   initialState: initialSessionsState,
-  reducers: {
-    snapshotReceived(state, action: PayloadAction<SessionsSnapshot>) {
-      sessionsAdapter.setAll(state, action.payload.sessions);
-      state.sequence = action.payload.sequence;
-      state.status = "ready";
-      state.error = null;
-    },
-  },
+  reducers: {},
   extraReducers: (builder) => {
     builder
+      .addCase(snapshotReceived, (state, action) => {
+        const { streamId, sequence, sessions } = action.payload;
+        // Never let an older snapshot of the same stream overwrite newer state (e.g. a
+        // slow HTTP response landing after the socket already delivered more).
+        if (state.streamId === streamId && state.sequence !== null && sequence < state.sequence)
+          return;
+        sessionsAdapter.setAll(state, sessions);
+        state.streamId = streamId;
+        state.sequence = sequence;
+        state.status = "ready";
+        state.error = null;
+      })
+      .addCase(eventsReceived, (state, action) => {
+        for (const event of action.payload) {
+          if (state.sequence !== null && event.sequence <= state.sequence) continue;
+          const current = state.entities[event.sessionId];
+          const next = projectSession(current, event);
+          if (next && next !== current) sessionsAdapter.setOne(state, next);
+          state.sequence = event.sequence;
+        }
+      })
       .addCase(fetchSessionsSnapshot.pending, (state) => {
         state.status = "loading";
         state.error = null;
-      })
-      .addCase(fetchSessionsSnapshot.fulfilled, (state, action) => {
-        sessionsAdapter.setAll(state, action.payload.sessions);
-        state.sequence = action.payload.sequence;
-        state.status = "ready";
       })
       .addCase(fetchSessionsSnapshot.rejected, (state, action) => {
         if (action.meta.aborted) {
@@ -84,5 +100,3 @@ export const sessionsSlice = createSlice({
       });
   },
 });
-
-export const { snapshotReceived } = sessionsSlice.actions;

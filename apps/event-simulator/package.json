@@ -1,0 +1,27 @@
+{
+  "name": "@pulsedesk/event-simulator",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch src/simulator.ts",
+    "start": "node src/simulator.ts",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@pulsedesk/contracts": "workspace:*",
+    "@pulsedesk/observability": "workspace:*",
+    "@pulsedesk/test-utils": "workspace:*"
+  },
+  "devDependencies": {
+    "@pulsedesk/eslint-config": "workspace:*",
+    "@pulsedesk/typescript-config": "workspace:*",
+    "@types/node": "^24.19.0",
+    "eslint": "^9.39.5",
+    "globals": "^17.12.0",
+    "typescript": "~6.0.3",
+    "vitest": "^5.0.2"
+  }
+}

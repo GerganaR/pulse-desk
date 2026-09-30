@@ -4,16 +4,18 @@ test.describe("Sessions list", () => {
   test("filters by status and keeps the filter in the URL", async ({ page }) => {
     await page.goto("/sessions");
     const filters = page.getByRole("navigation", { name: "Filter by status" });
-    await filters.getByRole("link", { name: /Idle/ }).click();
+    // "Active" always has rows with live traffic; idle sessions only exist after the
+    // gateway's inactivity window, so they aren't a reliable fixture on a fresh stack.
+    await filters.getByRole("link", { name: /Active/ }).click();
 
-    await expect(page).toHaveURL(/status=idle/);
+    await expect(page).toHaveURL(/status=active/);
     const statusCells = page.getByRole("table").getByRole("row").locator("td:nth-child(2)");
-    await expect(statusCells.first()).toHaveText("Idle");
-    for (const text of await statusCells.allTextContents()) expect(text).toBe("Idle");
+    await expect(statusCells.first()).toHaveText("Active");
+    for (const text of await statusCells.allTextContents()) expect(text).toBe("Active");
 
     // Reload renders the same filtered view on the server.
     await page.reload();
-    await expect(filters.getByRole("link", { name: /Idle/ })).toHaveAttribute(
+    await expect(filters.getByRole("link", { name: /Active/ })).toHaveAttribute(
       "aria-current",
       "true",
     );

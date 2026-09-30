@@ -1,4 +1,4 @@
-import type { SessionsSnapshot } from "@pulsedesk/contracts";
+import type { SessionDetailSnapshot, SessionsSnapshot } from "@pulsedesk/contracts";
 
 /**
  * Network boundary the domain layer depends on, injected as the thunk `extra` argument.
@@ -7,6 +7,8 @@ import type { SessionsSnapshot } from "@pulsedesk/contracts";
  */
 export interface PulseApi {
   fetchSessionsSnapshot(signal: AbortSignal): Promise<SessionsSnapshot>;
+  /** Resolves null when the session doesn't exist (HTTP 404). */
+  fetchSessionDetail(sessionId: string, signal: AbortSignal): Promise<SessionDetailSnapshot | null>;
 }
 
 export interface ThunkExtra {

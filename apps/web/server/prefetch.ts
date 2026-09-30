@@ -1,4 +1,10 @@
-import { createPulseStore, fetchSessionsSnapshot, type PulseStore } from "@pulsedesk/state";
+import {
+  createPulseStore,
+  fetchSessionDetail,
+  fetchSessionsSnapshot,
+  type PulseApi,
+  type PulseStore,
+} from "@pulsedesk/state";
 import type { SessionsSource } from "./data/sessions-source";
 
 export interface PrefetchResult {
@@ -7,34 +13,42 @@ export interface PrefetchResult {
   completed: boolean;
 }
 
+/** Server-side PulseApi: calls the data source directly, no HTTP loopback. */
+export const serverApi = (source: SessionsSource): PulseApi => ({
+  fetchSessionsSnapshot: (signal) => source.getSnapshot(signal),
+  fetchSessionDetail: (sessionId, signal) => source.getSessionDetail(sessionId, signal),
+});
+
 /**
  * Load the data a page needs into a fresh per-request store, within a time budget.
  *
- * SSR must not make time-to-first-byte hostage to a slow backend. If the snapshot
- * isn't ready within `budgetMs`, the request is aborted, the store stays in its
- * `idle` state, and the client fetches after hydration (showing skeletons meanwhile).
- * A failed fetch is *kept* in the state, so the page renders its error UI with retry.
+ * SSR must not make time-to-first-byte hostage to a slow backend. If data isn't ready
+ * within `budgetMs`, requests are aborted, the store stays `idle`, and the client loads
+ * after hydration (showing skeletons meanwhile). A *failed* fetch is kept in the state,
+ * so the page renders its error UI with retry.
  */
 export async function prefetchForRequest(
   source: SessionsSource,
   budgetMs: number,
+  { sessionId }: { sessionId?: string } = {},
 ): Promise<PrefetchResult> {
-  const store = createPulseStore({
-    extra: { api: { fetchSessionsSnapshot: (signal) => source.getSnapshot(signal) } },
-  });
+  const store = createPulseStore({ extra: { api: serverApi(source) } });
 
-  const request = store.dispatch(fetchSessionsSnapshot());
+  const requests = [
+    store.dispatch(fetchSessionsSnapshot()),
+    ...(sessionId ? [store.dispatch(fetchSessionDetail(sessionId))] : []),
+  ];
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timedOut = new Promise<"timeout">((resolve) => {
     timer = setTimeout(() => resolve("timeout"), budgetMs);
   });
 
-  const outcome = await Promise.race([request.then(() => "done" as const), timedOut]);
+  const outcome = await Promise.race([Promise.all(requests).then(() => "done" as const), timedOut]);
   clearTimeout(timer);
 
   if (outcome === "timeout") {
-    request.abort();
-    await request; // let the aborted action settle so the serialised state is consistent
+    requests.forEach((request) => request.abort());
+    await Promise.allSettled(requests); // let aborted actions settle so the state is consistent
     return { store, completed: false };
   }
   return { store, completed: true };
