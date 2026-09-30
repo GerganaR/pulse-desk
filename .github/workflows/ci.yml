@@ -38,7 +38,12 @@ jobs:
 
       - run: pnpm format:check
 
-      - run: pnpm turbo run lint typecheck test build
+      - run: pnpm turbo run lint typecheck test build build:devtools
+
+      # The reliability panel must never ship: dist/ may not contain its marker, and the
+      # devtools build must (proving the check can find it).
+      - name: Devtools excluded from the production bundle
+        run: pnpm --filter @pulsedesk/web check:devtools-excluded --strict
 
   e2e:
     name: End-to-end (Playwright)
@@ -57,7 +62,9 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - run: pnpm build
+      # Production build for the app specs, plus the devtools build the reliability spec
+      # drives through its fault-injection panel.
+      - run: pnpm build && pnpm build:devtools
 
       - name: Install Playwright browser
         run: pnpm --filter @pulsedesk/tests exec playwright install --with-deps chromium

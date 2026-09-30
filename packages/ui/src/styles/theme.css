@@ -49,6 +49,8 @@
   --animate-pulse-ring: pulse-ring 2s cubic-bezier(0.2, 0.6, 0.4, 1) infinite;
   --animate-fade-in: fade-in 160ms ease-out both;
   --animate-shimmer: shimmer 1.6s ease-in-out infinite;
+  /* Events replayed after a reconnect: a tint that fades, so they're noticeable once. */
+  --animate-replay-highlight: replay-highlight 4s ease-out both;
 
   @keyframes pulse-ring {
     0% {
@@ -69,6 +71,15 @@
     to {
       opacity: 1;
       transform: none;
+    }
+  }
+  @keyframes replay-highlight {
+    0%,
+    30% {
+      background-color: var(--pd-info-soft);
+    }
+    100% {
+      background-color: transparent;
     }
   }
   @keyframes shimmer {

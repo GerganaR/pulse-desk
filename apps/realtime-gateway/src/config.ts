@@ -21,6 +21,10 @@ export interface GatewayConfig {
   maxClosedSessions: number;
   sweepIntervalMs: number;
   maxConnections: number;
+  /** Per-socket send backlog above which a client is disconnected as a slow consumer. */
+  maxBufferedBytes: number;
+  /** A reconnect within this window keeps an agent's presence without a left/joined pair. */
+  presenceGraceMs: number;
   /** Largest accepted WebSocket frame from clients (they only send small control messages). */
   maxClientFrameBytes: number;
   maxIngestBodyBytes: number;
@@ -40,6 +44,9 @@ export function loadConfig(): GatewayConfig {
     maxClosedSessions: number(env.MAX_CLOSED_SESSIONS, 300),
     sweepIntervalMs: number(env.SWEEP_INTERVAL_MS, 5_000),
     maxConnections: number(env.MAX_CONNECTIONS, 1_000),
+    // Well above a full replay burst (500-event chunks), far below a memory problem.
+    maxBufferedBytes: number(env.MAX_BUFFERED_BYTES, 8 * 1024 * 1024),
+    presenceGraceMs: number(env.PRESENCE_GRACE_MS, 5_000),
     maxClientFrameBytes: 16 * 1024,
     maxIngestBodyBytes: 1024 * 1024,
   };

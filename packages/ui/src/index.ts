@@ -14,6 +14,7 @@ export {
   type ConnectionIndicatorProps,
   type ConnectionStatus,
 } from "./components/ConnectionIndicator.tsx";
+export { Dialog, type DialogProps } from "./components/Dialog.tsx";
 export {
   DropdownMenu,
   DropdownMenuItem,
@@ -35,3 +36,11 @@ export { Spinner, type SpinnerProps } from "./components/Spinner.tsx";
 export { StatTile, type StatTileProps } from "./components/StatTile.tsx";
 export { StatusBadge, type StatusBadgeProps } from "./components/StatusBadge.tsx";
 export { StatusDot, type StatusDotProps } from "./components/StatusDot.tsx";
+export {
+  Toast,
+  ToastViewport,
+  type ToastProps,
+  type ToastTone,
+  type ToastViewportProps,
+} from "./components/Toast.tsx";
+export { Tooltip, type TooltipProps, type TooltipTriggerProps } from "./components/Tooltip.tsx";

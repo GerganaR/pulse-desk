@@ -15,6 +15,10 @@ import { AgentSchema, SessionSchema } from "./session.ts";
  *                                                            or a different stream epoch)
  *   server → events …                                        (live)
  *
+ * Resync: a client that detects a gap it can't fill (a lost frame) sends `hello` again on
+ * the same socket with its last applied cursor. The server answers with the same
+ * welcome → sync/snapshot sequence; nothing about the socket is torn down.
+ *
  * Stream epochs: the demo gateway keeps its log in memory, so a restart begins a new
  * stream whose sequences restart at 1. Every cursor carries the `streamId` it belongs to;
  * a cursor from another epoch can't be resumed and gets a fresh snapshot instead of
@@ -105,6 +109,13 @@ export const PongMessageSchema = z.object({
   type: z.literal("pong"),
   nonce: z.number().int(),
   serverTime: z.number(),
+  /**
+   * Stream head when the pong was sent. Frames on a socket arrive in order, so by the time
+   * the pong arrives every event up to this sequence should have too. If one hasn't, the
+   * client has a gap, even when the stream has since gone quiet and no later event would
+   * reveal it.
+   */
+  headSequence: z.number().int().nonnegative(),
 });
 
 export const ErrorMessageSchema = z.object({

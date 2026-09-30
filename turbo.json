@@ -9,6 +9,12 @@
       "outputs": ["dist/**"],
       "env": ["NODE_ENV", "CLIENT_DEV_PORT"]
     },
+    "build:devtools": {
+      "dependsOn": ["^build"],
+      "inputs": ["$TURBO_DEFAULT$", "!**/*.test.{ts,tsx}", "!**/*.md"],
+      "outputs": ["dist-devtools/**"],
+      "env": ["NODE_ENV", "CLIENT_DEV_PORT"]
+    },
     "typecheck": {
       "dependsOn": ["^typecheck"],
       "outputs": []
@@ -35,6 +41,8 @@
         "REPLAY_BUFFER_SIZE",
         "IDLE_AFTER_MS",
         "CLOSE_AFTER_MS",
+        "MAX_BUFFERED_BYTES",
+        "PRESENCE_GRACE_MS",
         "LOG_LEVEL",
         "SESSION_COUNT",
         "EVENT_RATE",
@@ -59,6 +67,8 @@
         "REPLAY_BUFFER_SIZE",
         "IDLE_AFTER_MS",
         "CLOSE_AFTER_MS",
+        "MAX_BUFFERED_BYTES",
+        "PRESENCE_GRACE_MS",
         "LOG_LEVEL",
         "SESSION_COUNT",
         "EVENT_RATE",

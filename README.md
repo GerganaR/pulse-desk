@@ -5,10 +5,12 @@ explore resilient realtime frontend architecture. It combines WebSocket-driven s
 updates, streamed AI responses, Node.js streaming SSR, Redux Toolkit state management, and
 a pnpm/Turborepo monorepo built with Rspack.
 
-> **Status:** under active, incremental development. Phases 1–3 are complete: monorepo,
+> **Status:** under active, incremental development. Phases 1–4 are complete: monorepo,
 > shared contracts, design system, custom streaming SSR with Rspack, Redux domain layer,
-> dashboard and session views, and the realtime stack (WebSocket gateway, event
-> simulator, realtime client). This README is expanded as each phase lands.
+> dashboard and session views, the realtime stack (WebSocket gateway, event simulator,
+> realtime client), and realtime reliability (heartbeat, gap detection and resync,
+> dedupe, reorder buffer, backpressure, a dev fault-injection panel). This README is
+> expanded as each phase lands.
 
 ## Running locally
 
@@ -21,13 +23,14 @@ pnpm install
 pnpm dev           # web, realtime gateway and event simulator → http://localhost:3000
 ```
 
-| Command      | What it does                                                 |
-| ------------ | ------------------------------------------------------------ |
-| `pnpm dev`   | SSR server on `:3000`, client assets + HMR on `:3001`        |
-| `pnpm build` | Production client + server bundles (Rspack)                  |
-| `pnpm start` | Build (if needed) and run the production server              |
-| `pnpm check` | Lint, typecheck and unit/component tests for every package   |
-| `pnpm e2e`   | Playwright against the production build (`pnpm build` first) |
+| Command               | What it does                                                                        |
+| --------------------- | ----------------------------------------------------------------------------------- |
+| `pnpm dev`            | SSR server on `:3000`, client assets + HMR on `:3001`                               |
+| `pnpm build`          | Production client + server bundles (Rspack)                                         |
+| `pnpm build:devtools` | Same, with the reliability panel compiled in (`dist-devtools/`, used by E2E)        |
+| `pnpm start`          | Build (if needed) and run the production server                                     |
+| `pnpm check`          | Lint, typecheck and unit/component tests for every package                          |
+| `pnpm e2e`            | Playwright against the production build (`pnpm build && pnpm build:devtools` first) |
 
 If port 3000 is taken: `PORT=3100 pnpm dev`.
 
@@ -64,8 +67,23 @@ the task graph.
 
 Phase-by-phase delivery plan, decisions and acceptance criteria: [docs/roadmap.md](docs/roadmap.md).
 
+## Realtime reliability
+
+Every event is applied exactly once and in order, whatever happens to the connection:
+a contiguous global sequence, resume cursors with replay, heartbeat with dead-socket and
+"Degraded" detection, a reorder buffer, dedupe by sequence and eventId, same-socket
+resync for lost frames, and server-side backpressure. The UI stays quiet: a status pill
+for short blips, a banner only after 10 s, one toast on recovery, and replayed events
+marked in the timeline.
+
+In development (`pnpm dev`) a **Reliability** button (bottom left) opens a panel that
+injects faults into the live connection: disconnect/reconnect, latency, dropped,
+duplicated and reordered events. It isn't in production builds, and CI proves it.
+Details: [docs/realtime-reliability.md](docs/realtime-reliability.md).
+
 ## Architecture decisions
 
+- [ADR-001: WebSocket for realtime updates (not SSE or polling)](docs/adr/001-websocket-vs-sse.md)
 - [ADR-002: Redux state boundaries](docs/adr/002-redux-state-boundaries.md)
 - [ADR-003: Custom streaming SSR](docs/adr/003-ssr-architecture.md)
 
@@ -85,13 +103,15 @@ Each service reads its own variables; `pnpm dev` passes them through Turborepo.
 
 **realtime-gateway**
 
-| Variable             | Default  | Purpose                                                  |
-| -------------------- | -------- | -------------------------------------------------------- |
-| `GATEWAY_PORT`       | `4000`   | HTTP + WebSocket port (not `PORT`, which belongs to web) |
-| `REPLAY_BUFFER_SIZE` | `10000`  | Events retained for replay after reconnects              |
-| `IDLE_AFTER_MS`      | `45000`  | Inactivity before a session is marked idle               |
-| `CLOSE_AFTER_MS`     | `180000` | Inactivity before a session is closed                    |
-| `LOG_LEVEL`          | `info`   | `debug` logs every handshake and rejected ingest         |
+| Variable             | Default  | Purpose                                                   |
+| -------------------- | -------- | --------------------------------------------------------- |
+| `GATEWAY_PORT`       | `4000`   | HTTP + WebSocket port (not `PORT`, which belongs to web)  |
+| `REPLAY_BUFFER_SIZE` | `10000`  | Events retained for replay after reconnects               |
+| `IDLE_AFTER_MS`      | `45000`  | Inactivity before a session is marked idle                |
+| `CLOSE_AFTER_MS`     | `180000` | Inactivity before a session is closed                     |
+| `LOG_LEVEL`          | `info`   | `debug` logs every handshake and rejected ingest          |
+| `MAX_BUFFERED_BYTES` | 8 MiB    | Per-socket send backlog before a slow consumer is dropped |
+| `PRESENCE_GRACE_MS`  | `5000`   | How long a disconnected viewer stays "viewing"            |
 
 **event-simulator**
 
@@ -103,6 +123,7 @@ Each service reads its own variables; `pnpm dev` passes them through Turborepo.
 | `ERROR_RATE`       | `0.01`                  | Fraction of events sent malformed (exercises validation) |
 | `SEED`             | random                  | Fixed seed for reproducible traffic                      |
 
-Try the failure paths: stop the gateway process while the app is open (the indicator
-shows Reconnecting with a countdown and recovers on its own), or open a page with the
-gateway down (SSR renders the error state, and the page heals when the gateway returns).
+Try the failure paths: use the Reliability panel in dev; stop the gateway process while
+the app is open (the indicator shows Reconnecting with a countdown, a banner appears
+after 10 s, and it recovers on its own); or open a page with the gateway down (SSR
+renders the error state, and the page heals when the gateway returns).

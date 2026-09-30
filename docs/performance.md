@@ -22,6 +22,23 @@ react-router 345 KiB, Redux Toolkit 71 KiB, Immer 51 KiB.
 The Rspack entrypoint budget (350 KB minified) is currently exceeded (~342 KiB ≈ 350 KB).
 It is deliberately **not** raised to silence the warning.
 
+## Phase 4 delta
+
+Measured with the same method on both commits (initial scripts from `asset-manifest.json`,
+`gzip -9`):
+
+| Build               | Initial JS (minified) | Gzipped     |
+| ------------------- | --------------------- | ----------- |
+| Phase 3 (`4fa1793`) | 451.9 KB              | 137.4 KB    |
+| Phase 4             | 463.9 KB              | 140.8 KB    |
+| **Delta**           | **+12.0 KB**          | **+3.4 KB** |
+
+The increase is the event sequencer, heartbeat, browser-lifecycle handling, outage
+banner, toasts and the notifications slice. The reliability panel, fault injector,
+`Dialog` and `Tooltip` add nothing: they exist only in the devtools build, which
+`check-devtools-excluded.ts` verifies in CI. The budget warning stays on and the limit
+unchanged. Phase 7 owns bringing it back under.
+
 ### Known opportunities (to be evaluated in Phase 7)
 
 1. **Zod on the client.** Full Zod is used only to validate network input. Zod 4's

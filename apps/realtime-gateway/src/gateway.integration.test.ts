@@ -12,6 +12,7 @@ import { loadConfig } from "./config.ts";
 import { createGateway, type Gateway } from "./gateway.ts";
 
 const agent = { id: "agent_1", name: "Jordan Lee" };
+const PRESENCE_GRACE_MS = 150;
 let gateway: Gateway;
 let baseUrl: string;
 const openSockets: WebSocket[] = [];
@@ -19,7 +20,7 @@ let counter = 0;
 
 beforeEach(async () => {
   gateway = createGateway({
-    config: loadConfig(),
+    config: { ...loadConfig(), presenceGraceMs: PRESENCE_GRACE_MS },
     logger: createLogger({ sink: { write: () => {} } }),
   });
   const port = await gateway.listen(0, "127.0.0.1");
@@ -175,6 +176,25 @@ describe("realtime gateway (integration)", () => {
     await observer.waitFor(() => observer.sequences().length === 2);
     const events = observer.messages.flatMap((m) => (m.type === "events" ? m.events : []));
     expect(events.map((e) => e.type)).toEqual(["presence.joined", "presence.left"]);
+  });
+
+  it("a reconnect within the presence grace period produces no left/joined pair", async () => {
+    await ingest([created("s1")]);
+    const first = await connect(null);
+    const observer = await connect(null);
+    await first.waitFor((m) => m.some((x) => x.type === "snapshot"));
+    await observer.waitFor((m) => m.some((x) => x.type === "snapshot"));
+    first.send({ type: "session.watch", sessionId: "s1" });
+    await observer.waitFor(() => observer.sequences().length === 1); // joined
+
+    first.socket.close(); // a blip: the same agent is back straight away
+    const second = await connect(null);
+    await second.waitFor((m) => m.some((x) => x.type === "snapshot"));
+    second.send({ type: "session.watch", sessionId: "s1" });
+    await new Promise((resolve) => setTimeout(resolve, PRESENCE_GRACE_MS * 3));
+
+    const events = observer.messages.flatMap((m) => (m.type === "events" ? m.events : []));
+    expect(events.map((e) => e.type)).toEqual(["presence.joined"]);
   });
 
   it("answers malformed client messages with an error instead of crashing", async () => {

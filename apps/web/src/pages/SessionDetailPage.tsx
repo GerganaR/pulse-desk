@@ -1,4 +1,4 @@
-import { selectSessionById, selectViewers } from "@pulsedesk/state";
+import { selectHighlightedReplay, selectSessionById, selectViewers } from "@pulsedesk/state";
 import {
   Badge,
   Button,
@@ -58,6 +58,7 @@ export function SessionDetailPage() {
   const { isLoading, status, error, retry } = useSessionsSnapshot();
   const session = useAppSelector((state) => selectSessionById(state, sessionId));
   const viewers = useAppSelector((state) => selectViewers(state, sessionId));
+  const replayed = useAppSelector(selectHighlightedReplay);
   const { timeline, history, retry: retryTimeline } = useSessionTimeline(sessionId);
   useWatchSession(sessionId);
 
@@ -131,6 +132,7 @@ export function SessionDetailPage() {
         events={events}
         startedAt={session.startedAt}
         truncated={timeline?.truncated ?? false}
+        replayed={replayed}
       />
     );
   }

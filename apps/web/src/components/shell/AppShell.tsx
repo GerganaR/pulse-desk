@@ -1,9 +1,14 @@
 import { Outlet } from "react-router";
+import { useConfig } from "@/app/config";
+import { DevTools } from "@/features/devtools/DevTools";
+import { Toaster } from "@/features/notifications/Toaster";
+import { OutageBanner } from "@/features/realtime/OutageBanner";
 import { MobileHeader } from "./MobileHeader";
 import { Sidebar } from "./Sidebar";
 import { TopBar } from "./TopBar";
 
 export function AppShell() {
+  const { devTools } = useConfig();
   return (
     <div className="min-h-dvh lg:grid lg:grid-cols-[15rem_minmax(0,1fr)]">
       <a
@@ -21,9 +26,13 @@ export function AppShell() {
           tabIndex={-1}
           className="flex-1 px-4 py-6 outline-none sm:px-6 lg:px-8 lg:pt-6 lg:pb-10"
         >
+          <OutageBanner />
           <Outlet />
         </main>
       </div>
+      <Toaster />
+      {/* Compile-time constant first, so production builds drop the branch entirely. */}
+      {__DEVTOOLS__ && devTools && <DevTools />}
     </div>
   );
 }

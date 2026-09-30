@@ -10,8 +10,8 @@ file in the same PR.
 | 1     | Foundation: monorepo, contracts, design system, streaming SSR      | ✅ Done |
 | 2     | Dashboard, sessions list, session detail (on generated data)       | ✅ Done |
 | 3     | Realtime: gateway, simulator, realtime client, Redux wiring        | ✅ Done |
-| 4     | Reliability: reconnect, replay, heartbeat, fault injection         | Next    |
-| 5     | AI copilot: service, HTTP streaming, copilot UI                    |         |
+| 4     | Reliability: reconnect, replay, heartbeat, fault injection         | ✅ Done |
+| 5     | AI copilot: service, HTTP streaming, copilot UI                    | Next    |
 | 6     | AI quality: evaluation, hallucination regressions, AI workflow     |         |
 | 7     | Performance: batching at scale, virtualisation, splitting, budgets |         |
 | 8     | Testing: gap-filling, a11y automation, CI for the full stack       |         |
@@ -48,6 +48,40 @@ Changes made during Phase 3:
 8. **Client-side retention of ended sessions deferred to Phase 7.** The gateway ages
    out ended sessions, but a long-lived tab keeps them until its next snapshot. It's a
    memory and performance concern, so it gets measured with the load scenarios.
+
+Changes made during Phase 4:
+
+9. **Equal jitter kept instead of full jitter.** Full jitter can retry after ~0 ms, which
+   reads oddly next to a "retrying in 4s" countdown; equal jitter keeps a floor and
+   still de-synchronises clients. What changed is the reset: it now happens only after
+   10 s of stable connection, so a flapping gateway keeps backing off.
+10. **`pong` carries `headSequence` (protocol change).** Without it, losing the _last_
+    events before a quiet period is undetectable until the next event arrives. The
+    heartbeat now bounds how long a trailing gap can go unnoticed.
+11. **Degraded is a health flag, not a status.** It describes a live socket, and it's
+    orthogonal to syncing/live, so the client state has `degraded` + `rttMs` next to
+    `status`. While degraded, the client probes every 2 s so recovery shows quickly.
+12. **Devtools are a build-time constant, and E2E uses a second build.** The flagship E2E
+    drives the reliability panel, but the panel must not exist in production, and E2E
+    runs against the production build. `pnpm build:devtools` makes the same production
+    build with the panel compiled in (`dist-devtools/`), served on its own port for the
+    reliability spec only. Every other spec still tests the real artefact. The CI check
+    also uses it as a control: the marker must be absent from `dist/` _and_ present in
+    `dist-devtools/`.
+13. **No gateway debug routes.** All faults are injected client-side by wrapping the
+    transport, which reaches every recovery path (including the server's replay and
+    snapshot-on-expired-cursor) without adding attack surface to the gateway. The
+    server-only path, slow-consumer backpressure, is covered by unit tests.
+14. **Presence grace period (5 s) on the gateway.** Every short reconnect used to write
+    "stopped viewing / started viewing" into the timeline. `presence.left` now waits,
+    and a reconnect within the window takes over the watch silently.
+15. **Toasts are reserved for recovery that needs explaining.** The single uses are
+    recovery after a prolonged outage (≥ 10 s, the same threshold as the banner) and
+    reloads from a fresh snapshot (gateway restart, cursor expired). The `notifications`
+    slice (planned for Phase 3) landed here with its first real use.
+16. **The reliability panel is non-modal.** It docks bottom-left over the details column
+    (a bottom sheet on mobile), so the timeline stays visible while faults are injected.
+    `Dialog` supports both modes on the native `<dialog>` element.
 
 ## Ports and processes (target for `pnpm dev`)
 
@@ -218,6 +252,19 @@ or duplicated timeline entries, and the UI explains what is happening without na
 
 Every control in the reliability panel can be triggered during the demo and the
 timeline stays correct. The flagship E2E is green in CI.
+
+### Outcome
+
+Delivered as planned, with the adjustments listed above (items 9–16). Details, failure
+table and test map: [realtime-reliability.md](realtime-reliability.md); transport choice:
+[ADR-001](adr/001-websocket-vs-sse.md).
+
+- The flagship E2E and three further reliability specs pass on desktop and mobile, and
+  pass 5× repeated. A repeat run found a real race: "Retry now" during an in-flight
+  attempt fell back to the full backoff. It is fixed and has a unit test.
+- The production client grew by 3.4 KB gzipped (137.4 → 140.8 KB) for the sequencer,
+  heartbeat and status UX. The panel, fault injector, `Dialog` and `Tooltip` are not in
+  it (checked in CI).
 
 ---
 
@@ -425,6 +472,8 @@ a mid-range profile, and the results are recorded.
 | Item                                                              | From    | Planned in     |
 | ----------------------------------------------------------------- | ------- | -------------- |
 | Client entry over the 350 KB budget (Zod is the main contributor) | Phase 2 | Phase 7        |
+| Dev metrics view in the reliability panel (panel exists now)      | Phase 4 | Phase 7        |
+| Adaptive heartbeat thresholds (relative to normal RTT)            | Phase 4 | Phase 10       |
 | Delete generated mock session source                              | Phase 2 | Phase 3        |
 | Commit Phases 1–2                                                 | Phase 2 | Before Phase 3 |
 

@@ -11,7 +11,16 @@ import tseslint from "typescript-eslint";
  */
 export function base({ tsconfigRootDir }) {
   return tseslint.config(
-    { ignores: ["dist/**", ".dev/**", "coverage/**", "*.config.{js,ts}", "**/*.d.ts"] },
+    {
+      ignores: [
+        "dist/**",
+        "dist-devtools/**",
+        ".dev/**",
+        "coverage/**",
+        "*.config.{js,ts}",
+        "**/*.d.ts",
+      ],
+    },
     js.configs.recommended,
     ...tseslint.configs.strict,
     {

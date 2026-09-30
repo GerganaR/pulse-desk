@@ -41,6 +41,8 @@ export function createGateway({
     store,
     rooms,
     heartbeatIntervalMs: config.heartbeatIntervalMs,
+    maxBufferedBytes: config.maxBufferedBytes,
+    presenceGraceMs: config.presenceGraceMs,
     publish: (events) => pipeline.publish(events),
     logger,
     metrics,

@@ -1,5 +1,6 @@
 import { combineReducers, configureStore } from "@reduxjs/toolkit";
 import type { ThunkExtra } from "./api.ts";
+import { notificationsSlice } from "./notifications/notifications.slice.ts";
 import { presenceSlice } from "./presence/presence.slice.ts";
 import { connectionSlice } from "./realtime/connection.slice.ts";
 import { sessionsSlice } from "./sessions/sessions.slice.ts";
@@ -10,6 +11,7 @@ export const rootReducer = combineReducers({
   [timelinesSlice.reducerPath]: timelinesSlice.reducer,
   [presenceSlice.reducerPath]: presenceSlice.reducer,
   [connectionSlice.reducerPath]: connectionSlice.reducer,
+  [notificationsSlice.reducerPath]: notificationsSlice.reducer,
 });
 
 export type RootState = ReturnType<typeof rootReducer>;

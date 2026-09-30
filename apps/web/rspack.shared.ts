@@ -5,6 +5,21 @@ import type { RuleSetRule } from "@rspack/core";
 export const rootDir = import.meta.dirname;
 export const isDev = process.env.NODE_ENV !== "production";
 
+/**
+ * Developer tooling (the reliability panel and its fault-injecting transport) is compiled
+ * in only for development, or for an explicit devtools build used by E2E tests. The flag
+ * is a build-time constant (`__DEVTOOLS__`), so in a normal production build every
+ * devtools branch is dead code and its modules never enter the bundle.
+ * `scripts/check-devtools-excluded.ts` verifies that on the built output.
+ *
+ * Turbo's strict env mode doesn't pass PULSEDESK_DEVTOOLS to the `build` task, so
+ * `pnpm build` can't produce a devtools bundle by accident; `build:devtools` sets it.
+ */
+export const devToolsEnabled = isDev || process.env.PULSEDESK_DEVTOOLS === "1";
+const outDir = !isDev && devToolsEnabled ? "dist-devtools" : "dist";
+
+export const buildFlags = { __DEVTOOLS__: JSON.stringify(devToolsEnabled) };
+
 export const CLIENT_DEV_PORT = Number(process.env.CLIENT_DEV_PORT ?? 3001);
 /** Port of the SSR server — the URL developers actually open. */
 export const SSR_PORT = Number(process.env.PORT ?? 3000);
@@ -13,10 +28,10 @@ export const paths = {
   src: path.join(rootDir, "src"),
   clientEntry: path.join(rootDir, "client/entry-client.tsx"),
   serverEntry: path.join(rootDir, "server/server.ts"),
-  clientOutput: path.join(rootDir, "dist/client"),
+  clientOutput: path.join(rootDir, outDir, "client"),
   // Dev builds go to .dev/ so a running `pnpm dev` and a production `pnpm build` never
   // overwrite each other's bundles.
-  serverOutput: path.join(rootDir, isDev ? ".dev/server" : "dist/server"),
+  serverOutput: path.join(rootDir, isDev ? ".dev/server" : `${outDir}/server`),
 };
 
 /**

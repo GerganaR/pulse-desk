@@ -67,6 +67,9 @@ importers:
       '@pulsedesk/eslint-config':
         specifier: workspace:*
         version: link:../../packages/eslint-config
+      '@pulsedesk/realtime-client':
+        specifier: workspace:*
+        version: link:../../packages/realtime-client
       '@pulsedesk/test-utils':
         specifier: workspace:*
         version: link:../../packages/test-utils

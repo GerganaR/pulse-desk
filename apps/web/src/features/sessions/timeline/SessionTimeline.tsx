@@ -1,5 +1,6 @@
 import type { RealtimeEvent } from "@pulsedesk/contracts";
 import { cx, type Tone } from "@pulsedesk/ui";
+import { History } from "lucide-react";
 import { memo, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { formatOffset } from "@/lib/format";
 import { describeEvent, type EventPresentation } from "./describe-event";
@@ -18,16 +19,20 @@ const TimelineItem = memo(function TimelineItem({
   presentation,
   startedAt,
   isNew,
+  replayed,
 }: {
   event: RealtimeEvent;
   presentation: EventPresentation;
   startedAt: number;
   isNew: boolean;
+  /** Delivered by a replay after a reconnect/resync, rather than live. */
+  replayed: boolean;
 }) {
   const { icon: Icon, title, detail, tone } = presentation;
   return (
     <li
       data-sequence={event.sequence}
+      data-replayed={replayed || undefined}
       className={cx("relative flex gap-3 pb-4 last:pb-0", isNew && "motion-safe:animate-fade-in")}
     >
       {/* connector line between items */}
@@ -41,9 +46,20 @@ const TimelineItem = memo(function TimelineItem({
       >
         <Icon className="size-3.5" />
       </span>
-      <div className="min-w-0 flex-1 pt-0.5">
+      <div
+        className={cx(
+          "-mx-1.5 min-w-0 flex-1 rounded-md px-1.5 pt-0.5",
+          replayed && isNew && "animate-replay-highlight",
+        )}
+      >
         <div className="flex items-baseline justify-between gap-3">
-          <p className="truncate text-sm text-fg">{title}</p>
+          <p className="truncate text-sm text-fg">
+            {title}
+            {replayed && <span className="sr-only"> (caught up after reconnecting)</span>}
+          </p>
+          {replayed && (
+            <History aria-hidden="true" className="ml-auto size-3 shrink-0 self-center text-info" />
+          )}
           <span
             className="shrink-0 font-mono text-xs text-fg-subtle tabular-nums"
             title="Time since session start"
@@ -61,6 +77,8 @@ export interface SessionTimelineProps {
   events: RealtimeEvent[];
   startedAt: number;
   truncated: boolean;
+  /** Sequence range of the most recent replay, whose events get a replay marker. */
+  replayed?: { fromSequence: number; toSequence: number } | null;
 }
 
 /**
@@ -68,10 +86,16 @@ export interface SessionTimelineProps {
  *
  * Follows new events only while the reader is already at the bottom; scrolling up to
  * read history is never interrupted. Items that arrive after mount fade in, so live
- * activity (and events replayed after a reconnect) is noticeable without being loud.
+ * activity is noticeable without being loud. Events that arrived through a replay (after
+ * a reconnect or a resync) carry a small marker and a brief tint instead of a toast.
  * Not virtualised yet — that's Phase 7, with measurements.
  */
-export function SessionTimeline({ events, startedAt, truncated }: SessionTimelineProps) {
+export function SessionTimeline({
+  events,
+  startedAt,
+  truncated,
+  replayed = null,
+}: SessionTimelineProps) {
   const items = useMemo(
     () =>
       events.flatMap((event) => {
@@ -111,6 +135,11 @@ export function SessionTimeline({ events, startedAt, truncated }: SessionTimelin
             presentation={presentation}
             startedAt={startedAt}
             isNew={event.sequence > lastSequenceAtMount}
+            replayed={
+              replayed !== null &&
+              event.sequence >= replayed.fromSequence &&
+              event.sequence <= replayed.toSequence
+            }
           />
         ))}
       </ol>

@@ -5,7 +5,9 @@
   "type": "module",
   "sideEffects": false,
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./browser": "./src/browser-lifecycle.ts",
+    "./fault-injection": "./src/fault-injection.ts"
   },
   "scripts": {
     "lint": "eslint .",

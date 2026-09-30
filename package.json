@@ -10,6 +10,7 @@
   "scripts": {
     "dev": "turbo run dev",
     "build": "turbo run build",
+    "build:devtools": "turbo run build:devtools",
     "start": "turbo run start --filter=@pulsedesk/web",
     "test": "turbo run test",
     "lint": "turbo run lint",

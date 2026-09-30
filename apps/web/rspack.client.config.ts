@@ -3,6 +3,7 @@ import { defineConfig } from "@rspack/cli";
 import { type Compiler, rspack } from "@rspack/core";
 import { ReactRefreshRspackPlugin } from "@rspack/plugin-react-refresh";
 import {
+  buildFlags,
   CLIENT_DEV_PORT,
   clientPublicPath,
   isDev,
@@ -76,7 +77,11 @@ export default defineConfig({
       { test: /\.(woff2?|png|svg|ico)$/, type: "asset/resource" },
     ],
   },
-  plugins: [new AssetManifestPlugin(), isDev && new ReactRefreshRspackPlugin()],
+  plugins: [
+    new rspack.DefinePlugin(buildFlags),
+    new AssetManifestPlugin(),
+    isDev && new ReactRefreshRspackPlugin(),
+  ],
   optimization: {
     // Stable vendor chunk: React/Router change far less often than app code, so it
     // stays cached across deploys.

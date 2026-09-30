@@ -8,10 +8,13 @@
     "build": "pnpm run build:client && pnpm run build:server",
     "build:client": "rspack build -c rspack.client.config.ts --node-env production",
     "build:server": "rspack build -c rspack.server.config.ts --node-env production",
+    "build:devtools": "PULSEDESK_DEVTOOLS=1 pnpm run build",
     "start": "node --enable-source-maps dist/server/server.js",
+    "start:devtools": "node --enable-source-maps dist-devtools/server/server.js",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json",
-    "test": "vitest run"
+    "test": "vitest run",
+    "check:devtools-excluded": "node scripts/check-devtools-excluded.ts"
   },
   "browserslist": [
     "chrome >= 111",

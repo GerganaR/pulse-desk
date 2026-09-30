@@ -4,11 +4,13 @@ import type { Tone } from "./Badge.tsx";
 import { Spinner } from "./Spinner.tsx";
 import { StatusDot } from "./StatusDot.tsx";
 
-export type ConnectionStatus = "live" | "connecting" | "reconnecting" | "degraded" | "offline";
+export type ConnectionStatus =
+  "live" | "connecting" | "syncing" | "reconnecting" | "degraded" | "offline";
 
 const presentation: Record<ConnectionStatus, { label: string; tone: Tone; className: string }> = {
   live: { label: "Live", tone: "live", className: "text-live" },
   connecting: { label: "Connecting", tone: "info", className: "text-info" },
+  syncing: { label: "Catching up", tone: "info", className: "text-info" },
   reconnecting: { label: "Reconnecting", tone: "warning", className: "text-warning" },
   degraded: { label: "Degraded", tone: "warning", className: "text-warning" },
   offline: { label: "Offline", tone: "danger", className: "text-danger" },
@@ -16,7 +18,7 @@ const presentation: Record<ConnectionStatus, { label: string; tone: Tone; classN
 
 export interface ConnectionIndicatorProps {
   status: ConnectionStatus;
-  /** Secondary context, e.g. "retry in 4s" or "142 ms". Shown muted after the label. */
+  /** Secondary context, e.g. "retry in 4s", "23 events" or "1.2 s". Shown muted after the label. */
   detail?: ReactNode;
   className?: string;
 }
@@ -30,7 +32,7 @@ export interface ConnectionIndicatorProps {
  */
 export function ConnectionIndicator({ status, detail, className }: ConnectionIndicatorProps) {
   const { label, tone, className: toneClass } = presentation[status];
-  const busy = status === "connecting" || status === "reconnecting";
+  const busy = status === "connecting" || status === "syncing" || status === "reconnecting";
 
   return (
     <span

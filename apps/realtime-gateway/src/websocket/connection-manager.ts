@@ -19,6 +19,14 @@ import type { PresenceChange, SessionRooms } from "./session-room.ts";
 const REPLAY_CHUNK = 500;
 const MAX_INVALID_MESSAGES = 20;
 
+/**
+ * Close codes the gateway uses (4000–4999 is the application range). Clients reconnect
+ * on any close; the code is for logs and diagnostics.
+ */
+export const CLOSE_SLOW_CONSUMER = 4008;
+/** How long a slow consumer gets to complete the close handshake before it's destroyed. */
+const SLOW_CONSUMER_GRACE_MS = 2_000;
+
 interface Connection {
   id: string;
   socket: WebSocket;
@@ -34,6 +42,17 @@ export interface ConnectionManagerDeps {
   store: SessionStore;
   rooms: SessionRooms;
   heartbeatIntervalMs: number;
+  /**
+   * Backpressure limit: a live socket with more than this many bytes queued (sent by us,
+   * not yet flushed to the network) is disconnected instead of being buffered forever.
+   */
+  maxBufferedBytes: number;
+  /**
+   * How long a disconnected agent stays "viewing" before presence.left is published. A
+   * reconnect within this window (a network blip, a gateway-initiated slow-consumer drop)
+   * produces no left/joined pair: the new connection simply takes over the watch.
+   */
+  presenceGraceMs: number;
   /** Publishes presence events into the stream (via the pipeline). */
   publish: (events: UnsequencedEvent[]) => void;
   logger: Logger;
@@ -43,6 +62,7 @@ export interface ConnectionManagerDeps {
 export class ConnectionManager {
   readonly #connections = new Map<string, Connection>();
   readonly #deps: ConnectionManagerDeps;
+  readonly #pendingLeaves = new Set<ReturnType<typeof setTimeout>>();
 
   constructor(deps: ConnectionManagerDeps) {
     this.#deps = deps;
@@ -90,12 +110,39 @@ export class ConnectionManager {
     if (events.length === 0 || this.#connections.size === 0) return;
     const frame = JSON.stringify({ type: "events", events } satisfies ServerMessage);
     for (const connection of this.#connections.values()) {
-      if (connection.live) connection.socket.send(frame);
+      if (!connection.live) continue;
+      if (connection.socket.bufferedAmount > this.#deps.maxBufferedBytes) {
+        this.#dropSlowConsumer(connection);
+        continue;
+      }
+      connection.socket.send(frame);
     }
+  }
+
+  /**
+   * One slow client (a throttled tab, a phone on a bad link) must not grow the gateway's
+   * memory without bound. It is cut loose instead. Nothing is lost: it reconnects with
+   * its cursor and replay fills in everything it missed, or it gets a snapshot if it fell
+   * further behind than the replay buffer.
+   */
+  #dropSlowConsumer(connection: Connection) {
+    connection.live = false;
+    this.#deps.metrics.increment("gateway.backpressure.disconnects");
+    this.#deps.logger.warn("ws.slow_consumer", {
+      connectionId: connection.id,
+      bufferedBytes: connection.socket.bufferedAmount,
+    });
+    connection.socket.close(CLOSE_SLOW_CONSUMER, "Slow consumer");
+    // The close frame queues behind the backlog; don't wait for it indefinitely.
+    setTimeout(() => {
+      if (this.#connections.has(connection.id)) connection.socket.terminate();
+    }, SLOW_CONSUMER_GRACE_MS).unref();
   }
 
   /** Close every socket with "going away" so clients reconnect to the next instance. */
   closeAll() {
+    for (const timer of this.#pendingLeaves) clearTimeout(timer);
+    this.#pendingLeaves.clear();
     for (const connection of this.#connections.values())
       connection.socket.close(1001, "Server shutting down");
   }
@@ -129,6 +176,7 @@ export class ConnectionManager {
           type: "pong",
           nonce: message.nonce,
           serverTime: Date.now(),
+          headSequence: this.#deps.log.headSequence(),
         });
       case "session.watch":
       case "session.unwatch": {
@@ -222,8 +270,16 @@ export class ConnectionManager {
       "websocket.connection.duration",
       Date.now() - connection.connectedAt,
     );
-    if (connection.agent)
-      this.#publishPresence(this.#deps.rooms.leaveAll(connection.id, connection.agent.id));
+    const agent = connection.agent;
+    if (!agent) return;
+    const leave = () => this.#publishPresence(this.#deps.rooms.leaveAll(connection.id, agent.id));
+    if (this.#deps.presenceGraceMs <= 0) return leave();
+    const timer = setTimeout(() => {
+      this.#pendingLeaves.delete(timer);
+      leave();
+    }, this.#deps.presenceGraceMs);
+    timer.unref();
+    this.#pendingLeaves.add(timer);
   }
 
   #publishPresence(changes: PresenceChange[]) {

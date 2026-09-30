@@ -29,7 +29,8 @@ export const serverConfig = {
   clientDevOrigin: `http://localhost:${process.env.CLIENT_DEV_PORT ?? 3001}`,
   publicConfig: {
     gatewayUrl,
-    // Not configurable via env on purpose: debug controls can never ship to production.
-    devTools: !isProd,
+    // A build-time constant, not an env var: debug controls can't be switched on in a
+    // production deployment, because a production build doesn't contain them.
+    devTools: __DEVTOOLS__,
   } satisfies PublicConfig,
 };

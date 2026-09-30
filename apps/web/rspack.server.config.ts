@@ -1,5 +1,6 @@
 import { defineConfig } from "@rspack/cli";
-import { isDev, paths, resolve, rootDir, swcRule } from "./rspack.shared.ts";
+import { rspack } from "@rspack/core";
+import { buildFlags, isDev, paths, resolve, rootDir, swcRule } from "./rspack.shared.ts";
 
 /**
  * Server bundle: the Node HTTP server, the SSR pipeline and the React tree, emitted as a
@@ -31,6 +32,7 @@ export default defineConfig({
   module: {
     rules: [swcRule({ target: "node", refresh: false })],
   },
+  plugins: [new rspack.DefinePlugin(buildFlags)],
   optimization: {
     // Readable stack traces matter more than bytes on the server.
     minimize: false,

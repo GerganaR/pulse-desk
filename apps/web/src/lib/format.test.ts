@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatCount, formatDuration, formatRelative } from "./format";
+import { formatCount, formatDuration, formatLatency, formatRelative } from "./format";
 
 describe("formatRelative", () => {
   it.each([
@@ -31,5 +31,16 @@ describe("formatCount", () => {
   it("groups thousands and compacts large values", () => {
     expect(formatCount(1284)).toBe("1,284");
     expect(formatCount(12_900)).toBe("12.9K");
+  });
+});
+
+describe("formatLatency", () => {
+  it.each([
+    [42.4, "42 ms"],
+    [999, "999 ms"],
+    [1_000, "1 s"],
+    [1_540, "1.5 s"],
+  ])("%d ms → %s", (ms, expected) => {
+    expect(formatLatency(ms)).toBe(expected);
   });
 });

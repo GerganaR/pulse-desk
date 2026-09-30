@@ -29,6 +29,11 @@ export function formatRelative(elapsedMs: number): string {
   return `${Math.floor(elapsedMs / DAY)}d ago`;
 }
 
+/** Network latency: "85 ms", "1.2 s". */
+export function formatLatency(ms: number): string {
+  return ms < SECOND ? `${Math.round(ms)} ms` : `${formatDecimal(ms / SECOND)} s`;
+}
+
 /** "42s", "8m 22s", "1h 04m". */
 export function formatDuration(ms: number): string {
   const total = Math.max(0, Math.floor(ms / SECOND));
