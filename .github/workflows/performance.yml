@@ -1,0 +1,58 @@
+name: Performance
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: performance-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  budget:
+    name: Bundle budget · Load scenarios
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm turbo run build --filter=@pulsedesk/web
+
+      # Fails if the JavaScript every page needs before it can hydrate is over 350 KB
+      # (minified), or if any route's own chunk is over its limit. The limits live in
+      # apps/web/scripts/bundle-report.ts: bring the bundle down, don't raise them.
+      - name: Bundle budget
+        run: pnpm --filter @pulsedesk/web check:bundle
+
+      - name: Bundle report (job summary)
+        if: always()
+        run: |
+          {
+            echo '```text'
+            pnpm --silent --filter @pulsedesk/web bundle:report 2>&1
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Headless: reducers under a 1,000-event burst and a 10,000-event timeline, 200
+      # reconnects (no leaked sockets or timers), 100 simulated sessions through a real
+      # gateway, 10 concurrent AI streams. Thresholds are loose on purpose (shared
+      # runners); they catch a change in complexity, not a few percent.
+      - name: Load scenarios
+        run: pnpm load
+
+      # The browser scenarios (`pnpm perf`: frame times under CPU throttling) are not run
+      # here: their numbers depend on the machine, and a shared runner would make them
+      # flaky. They are run locally and recorded in docs/performance.md.

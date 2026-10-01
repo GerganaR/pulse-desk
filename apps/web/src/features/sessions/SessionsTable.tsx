@@ -1,7 +1,9 @@
 import type { Session } from "@pulsedesk/contracts";
 import { Avatar, Skeleton } from "@pulsedesk/ui";
-import { memo } from "react";
+import { useWindowVirtualizer } from "@tanstack/react-virtual";
+import { memo, useCallback, useEffect, useState, type Ref } from "react";
 import { Link } from "react-router";
+import { useHydrated } from "@/lib/use-hydrated";
 import { deviceIcons, deviceLabels, visitorAvatarName, visitorDisplayName } from "./presentation";
 import { LiveDuration, RelativeTime } from "./RelativeTime";
 import { SessionStatusBadge } from "./SessionStatusBadge";
@@ -9,11 +11,45 @@ import { SessionStatusBadge } from "./SessionStatusBadge";
 const headerCell = "px-4 py-2.5 text-left text-xs font-medium text-fg-muted first:pl-5 last:pr-5";
 const cell = "px-4 py-3 first:pl-5 last:pr-5";
 
-const SessionRow = memo(function SessionRow({ session }: { session: Session }) {
+/**
+ * Past this many rows only those near the viewport are rendered. A busy site has
+ * hundreds of sessions, each row re-renders as its visitor moves, and the list re-sorts
+ * on every event: the work should follow what's on screen, not what's in the store.
+ *
+ * 50 is about what the virtual list renders anyway (a screenful plus overscan), so below
+ * it virtualising saves nothing. It was 100 at first; measured under a burst, 100 plain
+ * rows cost twice the main-thread time of the virtual list (docs/performance.md).
+ */
+export const VIRTUALIZE_ROWS_ABOVE = 50;
+/** Rows the server sends for a long list; the rest appear once the page is interactive. */
+const SERVER_ROWS = 50;
+/** A starting point only: rows are measured, because their height depends on the font. */
+const ROW_HEIGHT_ESTIMATE = 61;
+const COLUMN_COUNT = 7;
+
+const SessionRow = memo(function SessionRow({
+  session,
+  index,
+  rowRef,
+}: {
+  session: Session;
+  /** Virtual list only: the row's position in the whole list. */
+  index?: number;
+  rowRef?: Ref<HTMLTableRowElement>;
+}) {
   const name = visitorDisplayName(session.visitor);
   const DeviceIcon = deviceIcons[session.device];
   return (
-    <tr className="relative transition-colors hover:bg-surface-hover">
+    <tr
+      ref={rowRef}
+      data-index={index}
+      // +2: aria-rowindex is 1-based, and the header is row 1.
+      aria-rowindex={index === undefined ? undefined : index + 2}
+      // The separator is each row's own border, not a sibling selector on the body
+      // (`divide-y`): the list re-sorts constantly, and with a sibling selector every
+      // re-sort made the browser restyle every row.
+      className="relative border-t border-line transition-colors hover:bg-surface-hover"
+    >
       <td className={cell}>
         <div className="flex items-center gap-3">
           <Avatar name={visitorAvatarName(session.visitor)} seed={session.visitor.id} />
@@ -85,16 +121,86 @@ function TableHead() {
   );
 }
 
-export function SessionsTable({ sessions, caption }: { sessions: Session[]; caption: string }) {
+/** Keeps the table's height while rows outside the viewport aren't rendered. */
+function Spacer({ height }: { height: number }) {
+  if (height <= 0) return null;
   return (
-    <table className="w-full table-auto">
+    <tr aria-hidden="true" data-spacer="true" style={{ height }}>
+      <td colSpan={COLUMN_COUNT} className="p-0" />
+    </tr>
+  );
+}
+
+/** The page scrolls, not the table, so rows are picked from the window's scroll position. */
+function VirtualBody({ sessions }: { sessions: Session[] }) {
+  // Where the rows start on the page. Measured when the body mounts and when the window
+  // resizes (the filters above can wrap).
+  const [body, setBody] = useState<HTMLTableSectionElement | null>(null);
+  const [bodyTop, setBodyTop] = useState(0);
+  const attachBody = useCallback((element: HTMLTableSectionElement | null) => {
+    setBody(element);
+    if (element) setBodyTop(element.getBoundingClientRect().top + window.scrollY);
+  }, []);
+  useEffect(() => {
+    if (!body) return;
+    const measure = () => setBodyTop(body.getBoundingClientRect().top + window.scrollY);
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, [body]);
+
+  const getItemKey = useCallback((index: number) => (sessions[index] as Session).id, [sessions]);
+  const virtualizer = useWindowVirtualizer({
+    count: sessions.length,
+    estimateSize: () => ROW_HEIGHT_ESTIMATE,
+    getItemKey,
+    overscan: 12,
+    scrollMargin: bodyTop,
+  });
+  const rows = virtualizer.getVirtualItems();
+  const first = rows[0];
+  const last = rows.at(-1);
+
+  return (
+    <tbody ref={attachBody}>
+      <Spacer height={first ? first.start - bodyTop : 0} />
+      {rows.map((row) => (
+        <SessionRow
+          key={row.key}
+          session={sessions[row.index] as Session}
+          index={row.index}
+          rowRef={virtualizer.measureElement}
+        />
+      ))}
+      <Spacer height={last ? virtualizer.getTotalSize() - (last.end - bodyTop) : 0} />
+    </tbody>
+  );
+}
+
+export function SessionsTable({ sessions, caption }: { sessions: Session[]; caption: string }) {
+  const hydrated = useHydrated();
+  const long = sessions.length > VIRTUALIZE_ROWS_ABOVE;
+  // The server (and the hydration pass) renders the top of a long list in full and
+  // reserves the height of the rest, so the page doesn't jump when the rows take over.
+  const serverRows = long && !hydrated ? sessions.slice(0, SERVER_ROWS) : sessions;
+
+  return (
+    <table
+      className="w-full table-auto"
+      aria-rowcount={long ? sessions.length + 1 : undefined}
+      data-virtual={long && hydrated ? "true" : undefined}
+    >
       <caption className="sr-only">{caption}</caption>
       <TableHead />
-      <tbody className="divide-y divide-line">
-        {sessions.map((session) => (
-          <SessionRow key={session.id} session={session} />
-        ))}
-      </tbody>
+      {long && hydrated ? (
+        <VirtualBody sessions={sessions} />
+      ) : (
+        <tbody>
+          {serverRows.map((session) => (
+            <SessionRow key={session.id} session={session} />
+          ))}
+          <Spacer height={(sessions.length - serverRows.length) * ROW_HEIGHT_ESTIMATE} />
+        </tbody>
+      )}
     </table>
   );
 }

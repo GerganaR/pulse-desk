@@ -1,6 +1,7 @@
 import type { APIRequestContext, Locator, Page } from "@playwright/test";
 import { devtoolsWebUrl, gatewayHttp } from "./env.ts";
 import { expect, test } from "./fixtures.ts";
+import { ingestPageViews } from "./gateway.ts";
 
 /**
  * Reliability, end to end: faults are injected through the dev reliability panel into
@@ -94,8 +95,10 @@ test.describe("Reliability", () => {
     const beforeDisconnect = await sequencesOf(timeline);
     const lastSeen = Math.max(...beforeDisconnect);
 
-    // The simulator keeps this visitor busy; wait until the gateway has recorded
-    // activity for the session that this tab has not seen.
+    // Activity while this tab is disconnected. The simulator usually provides some, but
+    // its visitor may have just finished their journey, so the test records two page
+    // views itself; then wait until the gateway has events this tab has not seen.
+    await ingestPageViews(request, sessionId, 2);
     await expect
       .poll(async () => (await gatewaySequences(request, sessionId)).filter((s) => s > lastSeen), {
         timeout: 30_000,

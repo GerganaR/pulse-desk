@@ -6,7 +6,7 @@ import {
   type EntityState,
 } from "@reduxjs/toolkit";
 import type { ThunkExtra } from "../api.ts";
-import { eventsReceived, snapshotReceived } from "../realtime/realtime.actions.ts";
+import { eventsReceived, sessionsExpired, snapshotReceived } from "../realtime/realtime.actions.ts";
 
 export type LoadStatus = "idle" | "loading" | "ready" | "error";
 
@@ -84,6 +84,9 @@ export const sessionsSlice = createSlice({
           if (next && next !== current) sessionsAdapter.setOne(state, next);
           state.sequence = event.sequence;
         }
+      })
+      .addCase(sessionsExpired, (state, action) => {
+        sessionsAdapter.removeMany(state, action.payload);
       })
       .addCase(fetchSessionsSnapshot.pending, (state) => {
         state.status = "loading";

@@ -89,8 +89,18 @@ export async function handlePageRequest(
     now,
     theme,
     nonce,
-    bootstrapScripts: ctx.assets.scripts,
+    // The page's own chunk goes out with the initial scripts (all `async`), so the
+    // browser fetches it in parallel instead of discovering it after the bundle runs.
+    bootstrapScripts: [
+      ...ctx.assets.scripts,
+      ...((route.chunk && ctx.assets.routes?.[route.chunk]) ?? []),
+    ],
     bootstrapScriptContent: `window.${BOOTSTRAP_GLOBAL}=${serializeForScript(bootstrap)}`,
+    // React streams a completed Suspense boundary separately (hidden, revealed by an
+    // inline script) once its HTML passes this size. Pages sit inside the route boundary,
+    // so with real data they would need JavaScript to appear. Everything rendered before
+    // the shell is ready belongs in the first flush.
+    progressiveChunkSize: Number.POSITIVE_INFINITY,
 
     onShellReady() {
       res.statusCode = renderErrored ? 500 : status;

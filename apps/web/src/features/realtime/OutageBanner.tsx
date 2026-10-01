@@ -18,7 +18,7 @@ import { useRealtimeClient } from "./RealtimeProvider";
 export function OutageBanner() {
   const connection = useAppSelector(selectConnection);
   const client = useRealtimeClient();
-  return <OutageNotice connection={connection} onRetry={() => client.reconnectNow()} />;
+  return <OutageNotice connection={connection} onRetry={() => client?.reconnectNow()} />;
 }
 
 export function OutageNotice({

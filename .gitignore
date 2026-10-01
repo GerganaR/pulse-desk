@@ -11,3 +11,5 @@ test-results/
 eval-reports/
 .DS_Store
 .dev/
+.rsdoctor/
+tests/load/results/

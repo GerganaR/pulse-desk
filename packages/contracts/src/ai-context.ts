@@ -1,5 +1,5 @@
 import { MAX_AI_CONTEXT_EVENTS, type AIContext, type AIContextEvent } from "./ai.ts";
-import { assertNever } from "./decode.ts";
+import { assertNever } from "./assert-never.ts";
 import type { RealtimeEvent } from "./events.ts";
 import { isVisitorActivity } from "./projection.ts";
 import type { Session } from "./session.ts";

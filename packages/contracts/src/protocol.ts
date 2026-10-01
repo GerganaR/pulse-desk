@@ -1,5 +1,7 @@
-import { z } from "zod";
+import "#zod-setup";
+import * as z from "zod/mini";
 import { RealtimeEventSchema } from "./events.ts";
+import { nonEmptyString, nonNegativeInt } from "./primitives.ts";
 import { AgentSchema, SessionSchema } from "./session.ts";
 
 /**
@@ -29,8 +31,8 @@ export const PROTOCOL_VERSION = 1;
 
 /** A position in a specific event stream. */
 export const StreamCursorSchema = z.object({
-  streamId: z.string().min(1),
-  sequence: z.number().int().nonnegative(),
+  streamId: nonEmptyString,
+  sequence: nonNegativeInt,
 });
 export type StreamCursor = z.infer<typeof StreamCursorSchema>;
 
@@ -38,27 +40,27 @@ export type StreamCursor = z.infer<typeof StreamCursorSchema>;
 
 export const HelloMessageSchema = z.object({
   type: z.literal("hello"),
-  protocolVersion: z.number().int(),
+  protocolVersion: z.int(),
   /** The support agent this connection belongs to (used for presence). */
   agent: AgentSchema,
   /** Last cursor the client fully processed, or null to request a fresh snapshot. */
-  resumeFrom: StreamCursorSchema.nullable(),
+  resumeFrom: z.nullable(StreamCursorSchema),
 });
 
 export const PingMessageSchema = z.object({
   type: z.literal("ping"),
-  nonce: z.number().int(),
+  nonce: z.int(),
   sentAt: z.number(),
 });
 
 export const WatchSessionMessageSchema = z.object({
   type: z.literal("session.watch"),
-  sessionId: z.string().min(1),
+  sessionId: nonEmptyString,
 });
 
 export const UnwatchSessionMessageSchema = z.object({
   type: z.literal("session.unwatch"),
-  sessionId: z.string().min(1),
+  sessionId: nonEmptyString,
 });
 
 export const ClientMessageSchema = z.discriminatedUnion("type", [
@@ -74,30 +76,30 @@ export type ClientMessage = z.infer<typeof ClientMessageSchema>;
 export const WelcomeMessageSchema = z.object({
   type: z.literal("welcome"),
   connectionId: z.string(),
-  streamId: z.string().min(1),
+  streamId: nonEmptyString,
   serverTime: z.number(),
-  heartbeatIntervalMs: z.number().int().positive(),
-  headSequence: z.number().int().nonnegative(),
+  heartbeatIntervalMs: z.int().check(z.positive()),
+  headSequence: nonNegativeInt,
 });
 
 export const SnapshotMessageSchema = z.object({
   type: z.literal("snapshot"),
-  streamId: z.string().min(1),
+  streamId: nonEmptyString,
   /** Stream position the snapshot reflects. Live events continue from sequence + 1. */
-  sequence: z.number().int().nonnegative(),
+  sequence: nonNegativeInt,
   sessions: z.array(SessionSchema),
 });
 
 export const SyncStartedMessageSchema = z.object({
   type: z.literal("sync.started"),
-  fromSequence: z.number().int().nonnegative(),
-  toSequence: z.number().int().nonnegative(),
+  fromSequence: nonNegativeInt,
+  toSequence: nonNegativeInt,
 });
 
 export const SyncCompletedMessageSchema = z.object({
   type: z.literal("sync.completed"),
-  replayedCount: z.number().int().nonnegative(),
-  headSequence: z.number().int().nonnegative(),
+  replayedCount: nonNegativeInt,
+  headSequence: nonNegativeInt,
 });
 
 export const EventsMessageSchema = z.object({
@@ -107,7 +109,7 @@ export const EventsMessageSchema = z.object({
 
 export const PongMessageSchema = z.object({
   type: z.literal("pong"),
-  nonce: z.number().int(),
+  nonce: z.int(),
   serverTime: z.number(),
   /**
    * Stream head when the pong was sent. Frames on a socket arrive in order, so by the time
@@ -115,7 +117,7 @@ export const PongMessageSchema = z.object({
    * client has a gap, even when the stream has since gone quiet and no later event would
    * reveal it.
    */
-  headSequence: z.number().int().nonnegative(),
+  headSequence: nonNegativeInt,
 });
 
 export const ErrorMessageSchema = z.object({
@@ -139,16 +141,16 @@ export type ServerMessage = z.infer<typeof ServerMessageSchema>;
 
 /** GET /sessions — used by SSR to render real data before the socket connects. */
 export const SessionsSnapshotSchema = z.object({
-  streamId: z.string().min(1),
-  sequence: z.number().int().nonnegative(),
+  streamId: nonEmptyString,
+  sequence: nonNegativeInt,
   sessions: z.array(SessionSchema),
 });
 export type SessionsSnapshot = z.infer<typeof SessionsSnapshotSchema>;
 
 /** GET /sessions/:id — session detail with its (bounded) recent timeline and viewers. */
 export const SessionDetailSnapshotSchema = z.object({
-  streamId: z.string().min(1),
-  sequence: z.number().int().nonnegative(),
+  streamId: nonEmptyString,
+  sequence: nonNegativeInt,
   session: SessionSchema,
   /** Most recent events, oldest first. May be truncated for long sessions. */
   events: z.array(RealtimeEventSchema),
@@ -167,7 +169,7 @@ export const MAX_INGEST_BATCH = 500;
  * event doesn't reject a whole batch.
  */
 export const IngestRequestSchema = z.object({
-  events: z.array(z.unknown()).max(MAX_INGEST_BATCH),
+  events: z.array(z.unknown()).check(z.maxLength(MAX_INGEST_BATCH)),
 });
 
 export const IngestRejectionReasonSchema = z.enum([
@@ -179,14 +181,14 @@ export const IngestRejectionReasonSchema = z.enum([
 export type IngestRejectionReason = z.infer<typeof IngestRejectionReasonSchema>;
 
 export const IngestResponseSchema = z.object({
-  accepted: z.number().int().nonnegative(),
+  accepted: nonNegativeInt,
   rejected: z.array(
     z.object({
-      index: z.number().int().nonnegative(),
+      index: nonNegativeInt,
       reason: IngestRejectionReasonSchema,
-      sessionId: z.string().nullable(),
+      sessionId: z.nullable(z.string()),
     }),
   ),
-  headSequence: z.number().int().nonnegative(),
+  headSequence: nonNegativeInt,
 });
 export type IngestResponse = z.infer<typeof IngestResponseSchema>;

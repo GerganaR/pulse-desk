@@ -26,7 +26,13 @@ export type MetricName =
   | "ai.request.cancelled"
   | "ai.request.failed"
   | "ai.answer.unverified_claims"
-  | "session.timeline.render.duration";
+  | "session.timeline.render.duration"
+  | "web.hydration.duration"
+  | "web.vitals.lcp"
+  | "web.vitals.inp"
+  | "web.vitals.cls"
+  | "web.vitals.fcp"
+  | "web.vitals.ttfb";
 
 export type MetricKind = "counter" | "gauge" | "histogram";
 export type Tags = Readonly<Record<string, string>>;
@@ -75,6 +81,7 @@ export function createMetrics(sink: MetricSink, now: () => number = () => Date.n
 export const noopMetrics: Metrics = createMetrics({ record: () => {} });
 
 export interface MetricSummary {
+  kind: MetricKind;
   count: number;
   sum: number;
   min: number;
@@ -93,6 +100,7 @@ export function createMemorySink() {
       const current = summaries.get(point.name);
       if (!current) {
         summaries.set(point.name, {
+          kind: point.kind,
           count: 1,
           sum: point.value,
           min: point.value,

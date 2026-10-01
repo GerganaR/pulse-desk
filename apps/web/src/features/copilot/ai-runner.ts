@@ -1,5 +1,5 @@
 import type { AIAction, AIError } from "@pulsedesk/contracts";
-import { createMemorySink, createMetrics, type Metrics } from "@pulsedesk/observability";
+import type { Metrics } from "@pulsedesk/observability";
 import {
   aiRequestCancelled,
   aiRequestCompleted,
@@ -11,6 +11,7 @@ import {
   type RootState,
 } from "@pulsedesk/state";
 import { nanoid } from "@reduxjs/toolkit";
+import { metrics as appMetrics } from "@/lib/metrics";
 import { AIStreamError, streamAIChat } from "./stream-client";
 
 export interface AIRunnerDeps {
@@ -41,9 +42,6 @@ export interface AIRunner {
   cancel(requestId: string): void;
 }
 
-/** In-memory AI metrics for this tab (a dev metrics view is Phase 7). */
-export const aiMetricsSink = createMemorySink();
-
 const UNEXPECTED: AIError = {
   code: "unavailable",
   message: "Something went wrong while answering.",
@@ -68,7 +66,7 @@ export function createAIRunner({
   scheduleFrame = (callback) => requestAnimationFrame(callback),
   cancelFrame = (handle) => cancelAnimationFrame(handle),
   now = () => Date.now(),
-  metrics = createMetrics(aiMetricsSink),
+  metrics = appMetrics,
   getHeaders = () => ({}),
   createId = () => `req_${nanoid(16)}`,
 }: AIRunnerDeps): AIRunner {

@@ -10,8 +10,16 @@ import type { ThemePreference } from "@/app/theme";
  */
 
 export interface AssetManifest {
+  /** Scripts every page loads. */
   scripts: string[];
   styles: string[];
+  /** Extra scripts per lazy route chunk, keyed by chunk name (see app/routes.tsx). */
+  routes?: Record<string, string[]>;
+  /**
+   * Scripts fetched with the page but run after hydration (the realtime connection).
+   * Sent as preload hints, so they download in parallel without delaying interactivity.
+   */
+  preload?: string[];
 }
 
 export interface PublicConfig {
@@ -19,7 +27,15 @@ export interface PublicConfig {
   gatewayUrl: string;
   /** Whether dev-only tooling (reliability panel) may render. Always false in production. */
   devTools: boolean;
+  /**
+   * How long realtime events wait to be applied together, in ms (`PUBLIC_EVENT_BATCH_MS`).
+   * A deployment can trade a little latency for fewer renders without a rebuild.
+   */
+  eventBatchMs: number;
 }
+
+/** About two frames: imperceptible as latency, and coalesces a burst into few renders. */
+export const DEFAULT_EVENT_BATCH_MS = 32;
 
 export interface BootstrapData {
   assets: AssetManifest;

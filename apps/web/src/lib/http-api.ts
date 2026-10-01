@@ -1,4 +1,3 @@
-import { SessionDetailSnapshotSchema, SessionsSnapshotSchema, decode } from "@pulsedesk/contracts";
 import type { PulseApi } from "@pulsedesk/state";
 
 export class HttpError extends Error {
@@ -10,6 +9,9 @@ export class HttpError extends Error {
     this.status = status;
   }
 }
+
+/** Shares a chunk with the realtime connection: both need the schemas, after hydration. */
+const loadDecoders = () => import(/* webpackChunkName: "realtime" */ "./decoders");
 
 /**
  * Browser implementation of the domain API. Responses are validated at the boundary:
@@ -26,7 +28,8 @@ export function createHttpApi(baseUrl = ""): PulseApi {
       if (!response.ok) {
         throw new HttpError(response.status, `Couldn't load sessions (HTTP ${response.status})`);
       }
-      const result = decode(SessionsSnapshotSchema, await response.json());
+      const { decodeSessionsSnapshot } = await loadDecoders();
+      const result = decodeSessionsSnapshot(await response.json());
       if (!result.ok) throw new Error("Received malformed session data from the server");
       return result.value;
     },
@@ -42,7 +45,8 @@ export function createHttpApi(baseUrl = ""): PulseApi {
           `Couldn't load session activity (HTTP ${response.status})`,
         );
       }
-      const result = decode(SessionDetailSnapshotSchema, await response.json());
+      const { decodeSessionDetail } = await loadDecoders();
+      const result = decodeSessionDetail(await response.json());
       if (!result.ok) throw new Error("Received malformed session data from the server");
       return result.value;
     },

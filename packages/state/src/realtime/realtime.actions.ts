@@ -14,3 +14,9 @@ export const eventsReceived = createAction<RealtimeEvent[]>("realtime/eventsRece
  * stream epoch).
  */
 export const snapshotReceived = createAction<SessionsSnapshot>("realtime/snapshotReceived");
+
+/**
+ * Ended sessions past retention (see `selectExpiredSessionIds`). One action so the
+ * session, its timeline and its viewers all go in the same update.
+ */
+export const sessionsExpired = createAction<string[]>("realtime/sessionsExpired");

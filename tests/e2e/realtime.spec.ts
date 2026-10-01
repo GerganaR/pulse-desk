@@ -1,5 +1,6 @@
 import type { Page } from "@playwright/test";
 import { expect, test } from "./fixtures.ts";
+import { ingestPageViews } from "./gateway.ts";
 
 const indicator = (page: Page) => page.locator("[data-status]:visible");
 
@@ -8,7 +9,10 @@ async function openActiveSession(page: Page) {
   const href = await page.getByRole("table").getByRole("link").first().getAttribute("href");
   expect(href).toMatch(/^\/sessions\/ses_/);
   await page.goto(href!);
-  return page.getByRole("list", { name: "Session activity" });
+  return {
+    timeline: page.getByRole("list", { name: "Session activity" }),
+    sessionId: href!.split("/").at(-1)!,
+  };
 }
 
 const sequencesOf = (timeline: ReturnType<Page["getByRole"]>) =>
@@ -23,17 +27,23 @@ test.describe("Realtime", () => {
     await expect(indicator(page)).toContainText("Live");
   });
 
-  test("a session's timeline grows live — in order, without duplicates", async ({ page }) => {
-    const timeline = await openActiveSession(page);
+  test("a session's timeline grows live — in order, without duplicates", async ({
+    page,
+    request,
+  }) => {
+    const { timeline, sessionId } = await openActiveSession(page);
     await expect(timeline.getByRole("listitem").first()).toBeVisible();
-    const initial = (await sequencesOf(timeline)).length;
+    await expect(indicator(page)).toHaveAttribute("data-status", "live");
+    const initial = await sequencesOf(timeline);
 
-    // The simulator keeps this visitor busy; new events must arrive without a reload.
-    await expect
-      .poll(async () => (await sequencesOf(timeline)).length, { timeout: 20_000 })
-      .toBeGreaterThan(initial);
+    // New activity must arrive without a reload. The test records it itself: the
+    // simulated visitor may have just finished their journey.
+    const titles = await ingestPageViews(request, sessionId, 2);
+    await expect(timeline.getByText(`Viewed ${titles[1]}`)).toBeVisible();
 
     const sequences = await sequencesOf(timeline);
+    expect(sequences.length).toBeGreaterThanOrEqual(initial.length + 2);
+    expect(Math.max(...sequences)).toBeGreaterThan(Math.max(...initial));
     expect(new Set(sequences).size).toBe(sequences.length);
     expect(sequences).toEqual([...sequences].sort((a, b) => a - b));
   });

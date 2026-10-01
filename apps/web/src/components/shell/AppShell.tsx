@@ -4,6 +4,7 @@ import { DevTools } from "@/features/devtools/DevTools";
 import { Toaster } from "@/features/notifications/Toaster";
 import { OutageBanner } from "@/features/realtime/OutageBanner";
 import { MobileHeader } from "./MobileHeader";
+import { RouteBoundary } from "./RouteBoundary";
 import { Sidebar } from "./Sidebar";
 import { TopBar } from "./TopBar";
 
@@ -27,7 +28,9 @@ export function AppShell() {
           className="flex-1 px-4 py-6 outline-none sm:px-6 lg:px-8 lg:pt-6 lg:pb-10"
         >
           <OutageBanner />
-          <Outlet />
+          <RouteBoundary>
+            <Outlet />
+          </RouteBoundary>
         </main>
       </div>
       <Toaster />

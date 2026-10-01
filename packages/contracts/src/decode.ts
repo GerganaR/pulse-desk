@@ -1,4 +1,4 @@
-import type { z } from "zod";
+import type * as z from "zod/mini";
 import { ClientMessageSchema, ServerMessageSchema } from "./protocol.ts";
 
 export type DecodeResult<T> = { ok: true; value: T } | { ok: false; error: DecodeError };
@@ -11,14 +11,20 @@ export type DecodeError =
  * Validate untrusted data against a schema. TypeScript types describe what we *expect*
  * from the network; this is what makes that expectation true at runtime.
  */
-export function decode<S extends z.ZodType>(schema: S, input: unknown): DecodeResult<z.infer<S>> {
+export function decode<S extends z.ZodMiniType>(
+  schema: S,
+  input: unknown,
+): DecodeResult<z.infer<S>> {
   const result = schema.safeParse(input);
   return result.success
     ? { ok: true, value: result.data }
     : { ok: false, error: { kind: "invalid_shape", issues: result.error.issues } };
 }
 
-export function decodeJson<S extends z.ZodType>(schema: S, raw: string): DecodeResult<z.infer<S>> {
+export function decodeJson<S extends z.ZodMiniType>(
+  schema: S,
+  raw: string,
+): DecodeResult<z.infer<S>> {
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
@@ -36,8 +42,3 @@ export function decodeJson<S extends z.ZodType>(schema: S, raw: string): DecodeR
 
 export const decodeServerMessage = (raw: string) => decodeJson(ServerMessageSchema, raw);
 export const decodeClientMessage = (raw: string) => decodeJson(ClientMessageSchema, raw);
-
-/** Compile-time exhaustiveness guard for discriminated-union switches. */
-export function assertNever(value: never, context = "value"): never {
-  throw new Error(`Unhandled ${context}: ${JSON.stringify(value)}`);
-}

@@ -16,7 +16,15 @@ export const isDev = process.env.NODE_ENV !== "production";
  * `pnpm build` can't produce a devtools bundle by accident; `build:devtools` sets it.
  */
 export const devToolsEnabled = isDev || process.env.PULSEDESK_DEVTOOLS === "1";
-const outDir = !isDev && devToolsEnabled ? "dist-devtools" : "dist";
+
+/**
+ * `pnpm analyze` builds the client with Rsdoctor attached. It writes to its own directory
+ * so an analysis never replaces the artefact that `pnpm start` and the E2E suite serve.
+ */
+export const analyze = process.env.RSDOCTOR === "1";
+export const analyzeDir = path.join(rootDir, ".rsdoctor");
+
+const outDir = analyze ? ".rsdoctor/build" : !isDev && devToolsEnabled ? "dist-devtools" : "dist";
 
 export const buildFlags = { __DEVTOOLS__: JSON.stringify(devToolsEnabled) };
 
@@ -40,7 +48,14 @@ export const paths = {
  */
 export const clientPublicPath = isDev ? `http://localhost:${CLIENT_DEV_PORT}/` : "/assets/";
 
+const profilingAlias: Record<string, string> =
+  !isDev && devToolsEnabled && !analyze ? { "react-dom/client$": "react-dom/profiling" } : {};
+
 export const resolve = {
+  // The devtools production build uses React's profiling build, so <Profiler> timings
+  // (the timeline's render duration in the metrics view) exist there too. The shipped
+  // build keeps the plain production React, where <Profiler> is free and records nothing.
+  alias: profilingAlias,
   extensions: [".ts", ".tsx", ".js", ".mjs", ".json"],
   // Internal packages ship TypeScript source; SWC compiles them like app code.
   // `tsConfig` lets Rspack honour the `@/` alias declared in tsconfig.json.

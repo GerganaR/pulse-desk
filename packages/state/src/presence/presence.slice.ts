@@ -1,6 +1,6 @@
 import type { Agent } from "@pulsedesk/contracts";
 import { createSlice } from "@reduxjs/toolkit";
-import { eventsReceived, snapshotReceived } from "../realtime/realtime.actions.ts";
+import { eventsReceived, sessionsExpired, snapshotReceived } from "../realtime/realtime.actions.ts";
 import { fetchSessionDetail } from "../timeline/timeline.slice.ts";
 
 export interface PresenceState {
@@ -29,6 +29,12 @@ export const presenceSlice = createSlice({
           state.bySession[event.sessionId] =
             event.type === "presence.joined" ? [...viewers, event.payload.agent] : viewers;
         }
+      })
+      .addCase(sessionsExpired, (state, action) => {
+        const expired = new Set(action.payload);
+        state.bySession = Object.fromEntries(
+          Object.entries(state.bySession).filter(([sessionId]) => !expired.has(sessionId)),
+        );
       })
       .addCase(snapshotReceived, () => ({ bySession: {} }));
   },

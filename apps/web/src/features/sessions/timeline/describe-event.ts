@@ -110,6 +110,21 @@ export function describeEvent(event: RealtimeEvent): EventPresentation | null {
   }
 }
 
+const presentations = new WeakMap<RealtimeEvent, EventPresentation | null>();
+
+/**
+ * `describeEvent`, remembered per event object. Events in the store are immutable, so a
+ * timeline of thousands is described once per event, not once per render.
+ */
+export function presentationOf(event: RealtimeEvent): EventPresentation | null {
+  let presentation = presentations.get(event);
+  if (presentation === undefined) {
+    presentation = describeEvent(event);
+    presentations.set(event, presentation);
+  }
+  return presentation;
+}
+
 const JOINED_LATE_MS = 10_000;
 const capitalize = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
 const agentName = (agent: { id: string; name: string }) =>

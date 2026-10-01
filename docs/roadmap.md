@@ -605,17 +605,21 @@ a mid-range profile, and the results are recorded.
 
 ### Carried-over items
 
-| Item                                                                               | From    | Planned in                  |
-| ---------------------------------------------------------------------------------- | ------- | --------------------------- |
-| Client entry over the 350 KB budget (Zod is the main contributor)                  | Phase 2 | Phase 7                     |
-| Dev metrics view in the reliability panel (panel exists now)                       | Phase 4 | Phase 7                     |
-| Adaptive heartbeat thresholds (relative to normal RTT)                             | Phase 4 | Phase 10                    |
-| Full 59-case `pnpm eval` against a real model (first live run: 7 answers, Phase 6) | Phase 5 | Needs the developer's quota |
-| `gemini-3.8-flash` answer cut off at both ends: find the cause                     | Phase 6 | Phase 8                     |
-| ~~One-off `realtime-gateway` test failure under full parallel run~~                | Phase 5 | Fixed in Phase 6 (item 29)  |
-| AI metrics in the dev metrics view (`aiMetricsSink` exists)                        | Phase 5 | Phase 7                     |
-| Delete generated mock session source                                               | Phase 2 | Phase 3                     |
-| Commit Phases 1–2                                                                  | Phase 2 | Before Phase 3              |
+| Item                                                                                                                                                                                                       | From    | Planned in                     |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | ------------------------------ |
+| Client entry over the 350 KB budget (Zod is the main contributor)                                                                                                                                          | Phase 2 | Phase 7                        |
+| Dev metrics view in the reliability panel (panel exists now)                                                                                                                                               | Phase 4 | Phase 7                        |
+| Adaptive heartbeat thresholds (relative to normal RTT)                                                                                                                                                     | Phase 4 | Phase 10                       |
+| Full 59-case `pnpm eval` against a real model (first live run: 7 answers, Phase 6)                                                                                                                         | Phase 5 | Needs the developer's quota    |
+| `gemini-3.8-flash` answer cut off at both ends: find the cause                                                                                                                                             | Phase 6 | Phase 8                        |
+| ~~One-off `realtime-gateway` test failure under full parallel run~~                                                                                                                                        | Phase 5 | Fixed in Phase 6 (item 29)     |
+| AI metrics in the dev metrics view (`aiMetricsSink` exists)                                                                                                                                                | Phase 5 | Phase 7                        |
+| Mobile timeline once seen one row short of the bottom in a screenshot; not reproduced in 12 reruns and 50 scroll samples                                                                                   | Phase 7 | Phase 8                        |
+| Occasional single 50–67 ms frame under a 1,000 events/s burst at 4× CPU throttle (about one run in three, one scenario); the frame-time bar was set to p95 ≤ 34 ms, no frame over 100 ms, ≤ 50 ms blocking | Phase 7 | Phase 8                        |
+| "Live" arrives up to 20 ms later on localhost for the dashboard and sessions list: the connection now starts after hydration                                                                               | Phase 7 | Phase 10                       |
+| Rspack's size warning still fires: it counts JS + CSS (382.7 KB against 350 KB). CI enforces initial JS ≤ 350 KB instead; the budget definition needs a decision                                           | Phase 7 | Needs the developer's decision |
+| Delete generated mock session source                                                                                                                                                                       | Phase 2 | Phase 3                        |
+| Commit Phases 1–2                                                                                                                                                                                          | Phase 2 | Before Phase 3                 |
 
 ### Risks
 

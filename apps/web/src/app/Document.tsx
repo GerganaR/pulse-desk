@@ -31,6 +31,14 @@ export function Document({ assets, children }: DocumentProps) {
         {assets.styles.map((href) => (
           <link key={href} rel="stylesheet" href={href} precedence="default" />
         ))}
+        {/*
+          Fetched alongside the page's scripts, run after hydration. Low priority, like
+          React's own script preloads: at the default (high) these competed with the
+          stylesheet on a slow connection and delayed first paint by about 200 ms.
+        */}
+        {assets.preload?.map((href) => (
+          <link key={href} rel="preload" as="script" href={href} fetchPriority="low" />
+        ))}
       </head>
       <body>{children}</body>
     </html>

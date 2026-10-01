@@ -1,4 +1,5 @@
 import type { RealtimeEvent } from "@pulsedesk/contracts";
+import { DEFAULT_EVENT_BATCH_MS } from "@/lib/bootstrap";
 
 export interface EventBatcherOptions {
   onFlush: (events: RealtimeEvent[]) => void;
@@ -19,7 +20,7 @@ export interface EventBatcherOptions {
  */
 export function createEventBatcher({
   onFlush,
-  intervalMs = 32,
+  intervalMs = DEFAULT_EVENT_BATCH_MS,
   maxSize = 1_000,
 }: EventBatcherOptions) {
   let buffer: RealtimeEvent[] = [];

@@ -4,6 +4,7 @@ export * from "./realtime/realtime.actions.ts";
 export * from "./realtime/connection.slice.ts";
 export * from "./sessions/sessions.slice.ts";
 export * from "./sessions/sessions.selectors.ts";
+export * from "./sessions/retention.ts";
 export * from "./timeline/timeline.slice.ts";
 export * from "./presence/presence.slice.ts";
 export * from "./notifications/notifications.slice.ts";

@@ -2,7 +2,18 @@ import type { AIFault } from "@pulsedesk/contracts";
 import type { RealtimeClient, RealtimeClientStats } from "@pulsedesk/realtime-client";
 import type { FaultInjector } from "@pulsedesk/realtime-client/fault-injection";
 import { selectConnection } from "@pulsedesk/state";
-import { Badge, Button, Dialog, Input, Tooltip, cx } from "@pulsedesk/ui";
+import {
+  Badge,
+  Button,
+  Dialog,
+  Input,
+  Tab,
+  TabList,
+  TabPanel,
+  Tabs,
+  Tooltip,
+  cx,
+} from "@pulsedesk/ui";
 import { Copy, Shuffle, Trash2, Unplug, Plug, Wrench } from "lucide-react";
 import { useEffect, useId, useState, useSyncExternalStore, type ReactNode } from "react";
 import { useAppSelector } from "@/app/hooks";
@@ -11,6 +22,7 @@ import { toIndicatorStatus } from "@/features/realtime/LiveConnectionIndicator";
 import { useFaultInjector, useRealtimeClient } from "@/features/realtime/RealtimeProvider";
 import { useNow } from "@/lib/clock";
 import { formatLatency, formatRelative } from "@/lib/format";
+import { MetricsView } from "./MetricsView";
 
 /**
  * Developer reliability panel: live connection diagnostics plus fault injection into the
@@ -376,16 +388,27 @@ export default function ReliabilityPanel() {
         title="Reliability panel"
         description="Development only. Faults apply to this tab's live connection."
       >
-        <ConnectionStats client={client} />
-        {faults ? (
-          <>
-            <FaultControls faults={faults} client={client} />
-            <AIFaultControls />
-            <FaultLog faults={faults} />
-          </>
-        ) : (
-          <p className="px-4 py-3 text-xs text-fg-muted">Fault injection isn't available.</p>
-        )}
+        {client && <ConnectionStats client={client} />}
+        <Tabs defaultValue="faults">
+          <TabList aria-label="Reliability tools" className="px-4 pt-2">
+            <Tab value="faults">Faults</Tab>
+            <Tab value="metrics">Metrics</Tab>
+          </TabList>
+          <TabPanel value="faults">
+            {client && faults ? (
+              <>
+                <FaultControls faults={faults} client={client} />
+                <AIFaultControls />
+                <FaultLog faults={faults} />
+              </>
+            ) : (
+              <p className="px-4 py-3 text-xs text-fg-muted">Fault injection isn't available.</p>
+            )}
+          </TabPanel>
+          <TabPanel value="metrics">
+            <MetricsView />
+          </TabPanel>
+        </Tabs>
       </Dialog>
     </div>
   );

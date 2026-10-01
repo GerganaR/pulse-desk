@@ -1,4 +1,4 @@
-import { assertNever } from "./decode.ts";
+import { assertNever } from "./assert-never.ts";
 import type { RealtimeEvent, RealtimeEventType } from "./events.ts";
 import type { Session } from "./session.ts";
 

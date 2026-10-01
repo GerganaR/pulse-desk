@@ -1,5 +1,5 @@
 import path from "node:path";
-import type { PublicConfig } from "@/lib/bootstrap";
+import { DEFAULT_EVENT_BATCH_MS, type PublicConfig } from "@/lib/bootstrap";
 
 // `process.env.NODE_ENV` is replaced at build time by Rspack (`mode`), so dev-only
 // branches are dead-code-eliminated from the production server bundle.
@@ -11,6 +11,14 @@ const distDir = path.resolve(import.meta.dirname, "..");
 const appDir = path.resolve(distDir, "..");
 
 const gatewayUrl = process.env.PUBLIC_GATEWAY_URL ?? "ws://localhost:4000/ws";
+
+/** 0 applies events on the next tick; above a second the UI would stop feeling live. */
+function eventBatchMs(value: string | undefined): number {
+  const parsed = Number(value);
+  return value !== undefined && value !== "" && Number.isFinite(parsed) && parsed >= 0
+    ? Math.min(parsed, 1_000)
+    : DEFAULT_EVENT_BATCH_MS;
+}
 
 export const serverConfig = {
   isProd,
@@ -34,5 +42,6 @@ export const serverConfig = {
     // A build-time constant, not an env var: debug controls can't be switched on in a
     // production deployment, because a production build doesn't contain them.
     devTools: __DEVTOOLS__,
+    eventBatchMs: eventBatchMs(process.env.PUBLIC_EVENT_BATCH_MS),
   } satisfies PublicConfig,
 };

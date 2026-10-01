@@ -1,10 +1,16 @@
 import type { RealtimeEvent, SessionDetailSnapshot } from "@pulsedesk/contracts";
-import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
+import { createAsyncThunk, createSlice, freeze, original } from "@reduxjs/toolkit";
 import type { ThunkExtra } from "../api.ts";
-import { eventsReceived, snapshotReceived } from "../realtime/realtime.actions.ts";
+import { eventsReceived, sessionsExpired, snapshotReceived } from "../realtime/realtime.actions.ts";
 
-/** Client-side cap per session; older entries are dropped (and flagged) past it. */
-export const TIMELINE_LIMIT = 500;
+/**
+ * Client-side cap per session; older entries are dropped (and flagged) past it.
+ *
+ * The timeline is virtualised, so the DOM doesn't grow with it; what the cap bounds is
+ * memory and reducer work in a tab watching one session for hours. At 10,000 events a
+ * flush still costs well under a frame (measured in tests/load, see docs/performance.md).
+ */
+export const TIMELINE_LIMIT = 10_000;
 
 export type HistoryStatus = "idle" | "loading" | "ready" | "missing" | "error";
 
@@ -38,7 +44,7 @@ const emptyTimeline = (): Timeline => ({
 
 /** Merge by sequence: overlapping history and live events can arrive in any order. */
 function merge(
-  existing: RealtimeEvent[],
+  existing: readonly RealtimeEvent[],
   incoming: readonly RealtimeEvent[],
 ): { events: RealtimeEvent[]; dropped: boolean } {
   const bySequence = new Map<number, RealtimeEvent>();
@@ -93,15 +99,28 @@ export const timelinesSlice = createSlice({
         for (const [sessionId, events] of bySession) {
           const timeline = state.bySession[sessionId];
           if (!timeline) continue;
+          // Work on the plain array, not Immer's draft of it: at the cap, trimming a
+          // 10,000-entry draft is 10,000 writes through a proxy (18 ms per flush, measured
+          // in tests/load). Building a new array is two native copies.
+          const existing = original(timeline.events) ?? timeline.events;
           // Fast path: live events almost always extend the end of the timeline.
-          const last = timeline.events.at(-1)?.sequence ?? 0;
-          if (events.every((e) => e.sequence > last)) timeline.events.push(...events);
-          else timeline.events = merge(timeline.events, events).events;
-          if (timeline.events.length > TIMELINE_LIMIT) {
-            timeline.events.splice(0, timeline.events.length - TIMELINE_LIMIT);
-            timeline.truncated = true;
-          }
+          const last = existing.at(-1)?.sequence ?? 0;
+          const next = events.every((e) => e.sequence > last)
+            ? existing.concat(events)
+            : merge(existing, events).events;
+          const overflow = next.length - TIMELINE_LIMIT;
+          // Frozen here (the new events deeply, the array itself shallowly), so Immer
+          // doesn't walk all of it again to freeze it: that walk was most of the cost.
+          for (const event of events) freeze(event, true);
+          timeline.events = freeze(overflow > 0 ? next.slice(overflow) : next);
+          if (overflow > 0) timeline.truncated = true;
         }
+      })
+      .addCase(sessionsExpired, (state, action) => {
+        const expired = new Set(action.payload);
+        state.bySession = Object.fromEntries(
+          Object.entries(state.bySession).filter(([sessionId]) => !expired.has(sessionId)),
+        );
       })
       .addCase(fetchSessionDetail.pending, (state, action) => {
         const timeline = (state.bySession[action.meta.arg] ??= emptyTimeline());

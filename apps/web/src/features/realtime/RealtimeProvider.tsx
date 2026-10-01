@@ -1,184 +1,82 @@
-import { createMetrics, createMemorySink } from "@pulsedesk/observability";
-import { createRealtimeClient, type RealtimeClient } from "@pulsedesk/realtime-client";
-import { bindBrowserLifecycle } from "@pulsedesk/realtime-client/browser";
-import {
-  createFaultInjector,
-  type FaultInjector,
-} from "@pulsedesk/realtime-client/fault-injection";
-import {
-  connectionStateChanged,
-  eventsReceived,
-  notificationAdded,
-  snapshotReceived,
-  syncCompleted,
-  syncStarted,
-} from "@pulsedesk/state";
+import type { RealtimeClient } from "@pulsedesk/realtime-client";
+import type { FaultInjector } from "@pulsedesk/realtime-client/fault-injection";
 import { createContext, use, useEffect, useState, type ReactNode } from "react";
 import { useConfig } from "@/app/config";
-import { useAppDispatch, useAppStore } from "@/app/hooks";
-import { currentAgent } from "@/lib/current-agent";
-import { formatCount } from "@/lib/format";
-import { createEventBatcher } from "./event-batcher";
-import { PROLONGED_OUTAGE_MS } from "./outage";
+import { useAppStore } from "@/app/hooks";
+import type { Connection } from "./connection";
 
-interface RealtimeContextValue {
-  client: RealtimeClient;
-  /** Only in devtools builds with devtools enabled: the transport's fault controls. */
-  faults: FaultInjector | null;
-}
+const RealtimeContext = createContext<Connection | null>(null);
 
-const RealtimeContext = createContext<RealtimeContextValue | null>(null);
+/** The connection chunk. Named so the server can send a preload hint for it. */
+const loadConnection = () => import(/* webpackChunkName: "realtime" */ "./connection");
 
-/** In-memory metrics for the realtime layer, shown in the dev reliability panel. */
-export const realtimeMetricsSink = createMemorySink();
+/** Waits between attempts to fetch the connection chunk when the fetch itself fails. */
+const CHUNK_RETRY_MS = [1_000, 3_000, 10_000, 30_000] as const;
 
 /**
  * Owns the WebSocket connection for the lifetime of the app.
  *
- * - The connection opens in an effect, so it never runs during SSR, and resumes from the
- *   stream position the server rendered: no gap between SSR data and live data.
- * - Socket events are batched before dispatch (one Redux update per ~32 ms window).
- * - A snapshot supersedes anything pending, so the batch buffer is cleared, not flushed.
- * - Reconnects are quiet (the indicator changes, nothing pops up). Only recovering from a
- *   prolonged outage, or from a gateway restart, earns a single toast.
+ * The connection opens in an effect, so it never runs during SSR. Its code (the realtime
+ * client, the wire schemas and their validation) is a separate chunk, fetched in parallel
+ * with the page's scripts and run after hydration: a server-rendered page is readable and
+ * interactive before any of it executes. Until the chunk has run, the context is `null`
+ * and the status pill reads "Connecting".
  */
 export function RealtimeProvider({ children }: { children: ReactNode }) {
-  const { gatewayUrl, devTools } = useConfig();
+  const { gatewayUrl, devTools, eventBatchMs } = useConfig();
   const store = useAppStore();
-  const dispatch = useAppDispatch();
-
-  // Creating the client has no side effects (no socket until connect()), so it is made
-  // once, during render — also on the server, where it's simply never connected. It
-  // resumes from the stream position the server rendered.
-  const [value] = useState<RealtimeContextValue>(() => {
-    const { streamId, sequence } = store.getState().sessions;
-    // `__DEVTOOLS__` is a build-time constant: in production builds this is `null` and the
-    // fault-injection module is never bundled.
-    const faults = __DEVTOOLS__ && devTools ? createFaultInjector() : null;
-    const client = createRealtimeClient({
-      url: gatewayUrl,
-      agent: currentAgent,
-      resumeFrom: streamId !== null && sequence !== null ? { streamId, sequence } : null,
-      metrics: createMetrics(realtimeMetricsSink),
-      transport: faults?.transport,
-    });
-    return { client, faults };
-  });
-  const realtime = value.client;
+  const [connection, setConnection] = useState<Connection | null>(null);
 
   useEffect(() => {
-    const metrics = createMetrics(realtimeMetricsSink);
-    const batcher = createEventBatcher({
-      onFlush: (events) => {
-        metrics.histogram("websocket.batch.size", events.length);
-        dispatch(eventsReceived(events));
-      },
-    });
+    let stopped = false;
+    let started: Connection | undefined;
+    let retryTimer: ReturnType<typeof setTimeout> | undefined;
 
-    // For the single "we're back" toast. A short blip gets none; a prolonged outage or a
-    // reload from a fresh snapshot (gateway restart) gets one, saying what happened.
-    let outageStartedAt: number | null = null;
-    let caughtUp: string | null = null;
-    let reloaded: string | null = null;
-
-    const unsubscribe = realtime.subscribe((event) => {
-      switch (event.type) {
-        case "state": {
-          const s = event.state;
-          dispatch(
-            connectionStateChanged({
-              status: s.status,
-              reconnectAttempt: s.reconnectAttempt,
-              nextRetryAt: s.nextRetryAt,
-              liveSince: s.liveSince,
-              disconnectedAt: s.disconnectedAt,
-              network: s.network,
-              rttMs: s.rttMs,
-              degraded: s.degraded,
-            }),
-          );
-          if (s.disconnectedAt !== null) {
-            outageStartedAt = s.disconnectedAt;
-          } else if (s.status === "live") {
-            const prolonged =
-              outageStartedAt !== null && Date.now() - outageStartedAt >= PROLONGED_OUTAGE_MS;
-            if (prolonged || reloaded)
-              dispatch(
-                notificationAdded({
-                  tone: "success",
-                  title: "Live updates restored",
-                  description: reloaded ?? caughtUp ?? undefined,
-                }),
-              );
-            outageStartedAt = caughtUp = reloaded = null;
-          }
-          return;
-        }
-        case "snapshot":
-          batcher.clear();
-          dispatch(
-            snapshotReceived({
-              streamId: event.streamId,
-              sequence: event.sequence,
-              sessions: event.sessions,
-            }),
-          );
-          if (event.reason === "new_stream")
-            reloaded = "The gateway restarted, so sessions were reloaded from a fresh snapshot.";
-          else if (event.reason === "cursor_expired")
-            reloaded = "Too much happened while offline to replay, so sessions were reloaded.";
-          return;
-        case "events":
-          batcher.push(event.events);
-          return;
-        case "sync.started":
-          dispatch(
-            syncStarted({
-              fromSequence: event.fromSequence,
-              toSequence: event.toSequence,
-              reason: event.reason,
-            }),
-          );
-          return;
-        case "sync.completed":
-          batcher.flush(); // show replayed events before announcing we're caught up
-          dispatch(syncCompleted({ replayedCount: event.replayedCount }));
-          if (event.reason === "reconnect" && event.replayedCount > 0) {
-            const count = formatCount(event.replayedCount);
-            caughtUp = `Caught up on ${count} missed event${event.replayedCount === 1 ? "" : "s"}.`;
-          }
-          return;
-      }
-    });
-
-    // Under StrictMode this runs twice; close() then connect() is supported and the
-    // client keeps its cursor, so the second connection resumes where the first left off.
-    realtime.connect();
-    const unbindLifecycle = bindBrowserLifecycle(realtime);
-    return () => {
-      unbindLifecycle();
-      unsubscribe();
-      realtime.close();
-      batcher.flush();
+    const start = (attempt: number) => {
+      loadConnection().then(
+        ({ startConnection }) => {
+          // Under StrictMode this effect runs twice; the first run is stopped before its
+          // chunk resolves and never opens a socket.
+          if (stopped) return;
+          started = startConnection({
+            gatewayUrl,
+            devTools,
+            eventBatchMs,
+            getState: store.getState,
+            dispatch: store.dispatch,
+          });
+          setConnection(started);
+        },
+        () => {
+          // The chunk couldn't be fetched (offline, or a deploy replaced it). Keep trying:
+          // without it the page would say "Connecting" forever.
+          if (stopped) return;
+          const delay = CHUNK_RETRY_MS[Math.min(attempt, CHUNK_RETRY_MS.length - 1)];
+          retryTimer = setTimeout(() => start(attempt + 1), delay);
+        },
+      );
     };
-  }, [realtime, dispatch]);
+    start(0);
 
-  return <RealtimeContext value={value}>{children}</RealtimeContext>;
+    return () => {
+      stopped = true;
+      clearTimeout(retryTimer);
+      started?.stop();
+      setConnection(null);
+    };
+  }, [gatewayUrl, devTools, eventBatchMs, store]);
+
+  return <RealtimeContext value={connection}>{children}</RealtimeContext>;
 }
 
-function useRealtimeContext(): RealtimeContextValue {
-  const context = use(RealtimeContext);
-  if (!context) throw new Error("Realtime hooks require <RealtimeProvider>");
-  return context;
-}
-
-export function useRealtimeClient(): RealtimeClient {
-  return useRealtimeContext().client;
+/** The realtime client, or `null` until the connection chunk has loaded. */
+export function useRealtimeClient(): RealtimeClient | null {
+  return use(RealtimeContext)?.client ?? null;
 }
 
 /** Fault controls for the dev reliability panel; null unless devtools are enabled. */
 export function useFaultInjector(): FaultInjector | null {
-  return useRealtimeContext().faults;
+  return use(RealtimeContext)?.faults ?? null;
 }
 
 /** Tell the gateway this agent is viewing a session (presence) for as long as mounted. */
@@ -186,7 +84,7 @@ export function useWatchSession(sessionId: string) {
   const client = useRealtimeClient();
   // Effects never run during SSR, so presence is only ever announced by a real browser.
   useEffect(() => {
-    if (!sessionId) return;
+    if (!client || !sessionId) return;
     client.watchSession(sessionId);
     return () => client.unwatchSession(sessionId);
   }, [client, sessionId]);

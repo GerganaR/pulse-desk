@@ -16,6 +16,7 @@ export function base({ tsconfigRootDir }) {
         "dist/**",
         "dist-devtools/**",
         ".dev/**",
+        ".rsdoctor/**",
         "coverage/**",
         "*.config.{js,ts}",
         "**/*.d.ts",

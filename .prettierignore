@@ -6,3 +6,5 @@ pnpm-lock.yaml
 playwright-report
 test-results
 .dev
+.rsdoctor
+tests/load/results

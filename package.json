@@ -19,6 +19,10 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "e2e": "pnpm --filter @pulsedesk/tests e2e",
+    "load": "pnpm --filter @pulsedesk/tests load",
+    "perf": "pnpm --filter @pulsedesk/tests perf",
+    "bundle:report": "pnpm --filter @pulsedesk/web bundle:report",
+    "analyze": "pnpm --filter @pulsedesk/web analyze",
     "eval": "pnpm --filter @pulsedesk/ai-service eval"
   },
   "devDependencies": {

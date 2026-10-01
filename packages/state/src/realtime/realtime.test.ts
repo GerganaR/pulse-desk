@@ -6,7 +6,12 @@ import { selectViewers } from "../presence/presence.slice.ts";
 import { selectSessionById } from "../sessions/sessions.selectors.ts";
 import { createPulseStore } from "../store.ts";
 import { fetchSessionDetail, selectTimeline, TIMELINE_LIMIT } from "../timeline/timeline.slice.ts";
-import { eventsReceived, snapshotReceived } from "./realtime.actions.ts";
+import {
+  CLOSED_SESSION_RETENTION_MS,
+  MAX_CLOSED_SESSIONS,
+  selectExpiredSessionIds,
+} from "../sessions/retention.ts";
+import { eventsReceived, sessionsExpired, snapshotReceived } from "./realtime.actions.ts";
 
 const T0 = 1_760_000_000_000;
 const agent: Agent = { id: "a1", name: "Jordan" };
@@ -186,5 +191,68 @@ describe("presence", () => {
   it("returns a stable empty list for unwatched sessions", () => {
     const store = setup();
     expect(selectViewers(store.getState(), "x")).toBe(selectViewers(store.getState(), "y"));
+  });
+});
+
+describe("retention of ended sessions", () => {
+  const HOUR = 60 * 60 * 1_000;
+  const closed = (id: string, endedAt: number) =>
+    makeSession({ id, status: "closed", endedAt, lastActivityAt: endedAt });
+
+  function storeWith(sessions: ReturnType<typeof makeSession>[]) {
+    const store = createPulseStore({
+      extra: {
+        api: {
+          fetchSessionsSnapshot: () => new Promise(() => {}),
+          fetchSessionDetail: async (sessionId) => ({
+            streamId: "stream-1",
+            sequence: 10,
+            session: makeSession({ id: sessionId }),
+            events: [click(9, sessionId)],
+            truncated: false,
+            viewers: [agent],
+          }),
+        },
+      },
+    });
+    store.dispatch(snapshotReceived({ streamId: "stream-1", sequence: 10, sessions }));
+    return store;
+  }
+
+  it("expires ended sessions older than the retention window, and only those", () => {
+    const store = storeWith([
+      makeSession({ id: "live", status: "active", lastActivityAt: T0 - 9 * HOUR }),
+      closed("recent", T0 - HOUR),
+      closed("old", T0 - CLOSED_SESSION_RETENTION_MS - 1),
+      closed("boundary", T0 - CLOSED_SESSION_RETENTION_MS),
+    ]);
+    expect(selectExpiredSessionIds(store.getState(), T0)).toEqual(["old"]);
+  });
+
+  it("keeps at most the newest MAX_CLOSED_SESSIONS ended sessions", () => {
+    const sessions = Array.from({ length: MAX_CLOSED_SESSIONS + 3 }, (_, i) =>
+      closed(`c${i}`, T0 - i * 1_000),
+    );
+    const store = storeWith(sessions);
+    expect(selectExpiredSessionIds(store.getState(), T0)).toEqual([
+      `c${MAX_CLOSED_SESSIONS}`,
+      `c${MAX_CLOSED_SESSIONS + 1}`,
+      `c${MAX_CLOSED_SESSIONS + 2}`,
+    ]);
+  });
+
+  it("removes an expired session together with its timeline and viewers", async () => {
+    const store = storeWith([closed("old", T0 - 7 * HOUR), closed("recent", T0 - HOUR)]);
+    await store.dispatch(fetchSessionDetail("old"));
+    await store.dispatch(fetchSessionDetail("recent"));
+    expect(selectViewers(store.getState(), "old")).toEqual([agent]);
+
+    store.dispatch(sessionsExpired(selectExpiredSessionIds(store.getState(), T0)));
+
+    expect(store.getState().sessions.ids).toEqual(["recent"]);
+    expect(selectTimeline(store.getState(), "old")).toBeUndefined();
+    expect(selectViewers(store.getState(), "old")).toEqual([]);
+    expect(selectTimeline(store.getState(), "recent")?.events).toHaveLength(1);
+    expect(selectViewers(store.getState(), "recent")).toEqual([agent]);
   });
 });

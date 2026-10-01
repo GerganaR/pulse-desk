@@ -6,12 +6,23 @@
   "scripts": {
     "e2e": "playwright test",
     "e2e:install": "playwright install chromium",
+    "load": "vitest run --config load/vitest.config.ts",
+    "perf": "playwright test --config load/playwright.perf.config.ts",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",
+    "@pulsedesk/ai-service": "workspace:*",
+    "@pulsedesk/contracts": "workspace:*",
+    "@pulsedesk/event-simulator": "workspace:*",
+    "@pulsedesk/observability": "workspace:*",
+    "@pulsedesk/realtime-client": "workspace:*",
+    "@pulsedesk/realtime-gateway": "workspace:*",
+    "@pulsedesk/state": "workspace:*",
+    "@pulsedesk/test-utils": "workspace:*",
     "@pulsedesk/typescript-config": "workspace:*",
     "@types/node": "^24.19.0",
-    "typescript": "~6.0.3"
+    "typescript": "~6.0.3",
+    "vitest": "^5.0.2"
   }
 }

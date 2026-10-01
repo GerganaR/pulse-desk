@@ -1,11 +1,12 @@
 import http, { type IncomingMessage, type ServerResponse } from "node:http";
-import sirv from "sirv";
 import { serverConfig as config } from "./config";
 import { handleApiRequest } from "./api";
 import { createGatewaySessionsSource } from "./data/gateway-sessions-source";
 import { errorFields, log } from "./log";
 import { ManifestNotReadyError, createManifestLoader } from "./manifest";
+import { preloadAllRoutes } from "./entry-server";
 import { handlePageRequest } from "./ssr";
+import { createStaticHandler } from "./static";
 
 const getManifest = createManifestLoader(
   config.isProd
@@ -17,9 +18,16 @@ const getManifest = createManifestLoader(
 // Hashed client assets: cache forever. Only served by this process in production;
 // in development the Rspack dev server serves them (with HMR).
 const serveAssets = config.isProd
-  ? sirv(config.clientDist, { immutable: true, maxAge: 31_536_000, etag: true })
+  ? createStaticHandler(config.clientDist, {
+      immutable: true,
+      maxAge: 31_536_000,
+      etag: true,
+      // The build writes .br and .gz next to each asset; send the one the browser accepts.
+      brotli: true,
+      gzip: true,
+    })
   : undefined;
-const servePublic = sirv(config.publicDir, {
+const servePublic = createStaticHandler(config.publicDir, {
   maxAge: config.isProd ? 3600 : 0,
   dev: !config.isProd,
 });
@@ -83,13 +91,16 @@ function onRequest(req: IncomingMessage, res: ServerResponse) {
 
   if (pathname.startsWith("/assets/")) {
     if (!serveAssets) return notFound(res);
-    req.url = req.url?.slice("/assets".length);
-    serveAssets(req, res, () => notFound(res));
+    void serveAssets(req, res, pathname.slice("/assets".length), () => notFound(res));
     return;
   }
 
-  servePublic(req, res, () => void renderPage(req, res));
+  void servePublic(req, res, pathname, () => void renderPage(req, res));
 }
+
+// Pages are lazy chunks. Loading them all before accepting requests means every page
+// server-renders in the first flush, with no Suspense fallback in the HTML.
+await preloadAllRoutes();
 
 const server = http.createServer(onRequest);
 

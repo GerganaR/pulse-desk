@@ -7,8 +7,13 @@
     "./src/csp-safe.ts"
   ],
   "exports": {
-    ".": "./src/index.ts",
-    "./csp-safe": "./src/csp-safe.ts"
+    ".": "./src/index.ts"
+  },
+  "imports": {
+    "#zod-setup": {
+      "browser": "./src/csp-safe.ts",
+      "default": "./src/zod-setup.ts"
+    }
   },
   "scripts": {
     "lint": "eslint .",

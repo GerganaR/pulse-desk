@@ -11,8 +11,32 @@ describe("metrics", () => {
     metrics.histogram("websocket.batch.size", 10);
     metrics.histogram("websocket.batch.size", 2);
 
-    expect(sink.get("websocket.events.received")).toMatchObject({ count: 2, sum: 8 });
-    expect(sink.get("websocket.batch.size")).toMatchObject({ min: 2, max: 10, last: 2 });
+    expect(sink.get("websocket.events.received")).toMatchObject({
+      kind: "counter",
+      count: 2,
+      sum: 8,
+    });
+    expect(sink.get("websocket.batch.size")).toMatchObject({
+      kind: "histogram",
+      min: 2,
+      max: 10,
+      last: 2,
+    });
+  });
+
+  it("keeps the latest value of a gauge", () => {
+    const sink = createMemorySink();
+    const metrics = createMetrics(sink);
+    metrics.gauge("web.vitals.lcp", 1_800, { rating: "good" });
+    metrics.gauge("web.vitals.lcp", 2_100, { rating: "good" });
+    expect(sink.get("web.vitals.lcp")).toMatchObject({ kind: "gauge", last: 2_100, count: 2 });
+  });
+
+  it("reset() forgets everything", () => {
+    const sink = createMemorySink();
+    createMetrics(sink).increment("websocket.reconnect.count");
+    sink.reset();
+    expect(sink.snapshot()).toEqual({});
   });
 
   it("timers record elapsed time", () => {

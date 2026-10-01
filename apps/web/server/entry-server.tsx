@@ -6,7 +6,7 @@ import { Root } from "@/app/Root";
 import type { ThemePreference } from "@/app/theme";
 import type { AssetManifest, PublicConfig } from "@/lib/bootstrap";
 
-export { resolveRouteHandle } from "@/app/routes";
+export { preloadAllRoutes, resolveRouteHandle } from "@/app/routes";
 
 export interface RenderOptions extends RenderToPipeableStreamOptions {
   url: string;

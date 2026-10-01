@@ -1,4 +1,6 @@
-import { z } from "zod";
+import "#zod-setup";
+import * as z from "zod/mini";
+import { nonNegativeInt } from "./primitives.ts";
 import { DeviceTypeSchema, SessionStatusSchema } from "./session.ts";
 
 /**
@@ -29,15 +31,17 @@ export const MAX_AI_PROMPT_LENGTH = 1_000;
 export const AIChatRequestSchema = z
   .object({
     /** Client-generated, so the browser can correlate the stream before any response. */
-    requestId: z.string().regex(/^[\w-]{8,64}$/),
-    sessionId: z.string().min(1).max(128),
+    requestId: z.string().check(z.regex(/^[\w-]{8,64}$/)),
+    sessionId: z.string().check(z.minLength(1), z.maxLength(128)),
     action: AIActionSchema,
-    prompt: z.string().trim().max(MAX_AI_PROMPT_LENGTH).default(""),
+    prompt: z._default(z.string().check(z.trim(), z.maxLength(MAX_AI_PROMPT_LENGTH)), ""),
   })
-  .refine((request) => request.action !== "ask" || request.prompt.length > 0, {
-    message: "A question is required",
-    path: ["prompt"],
-  });
+  .check(
+    z.refine((request) => request.action !== "ask" || request.prompt.length > 0, {
+      message: "A question is required",
+      path: ["prompt"],
+    }),
+  );
 export type AIChatRequest = z.input<typeof AIChatRequestSchema>;
 
 // ─── Context: what the model is allowed to know ─────────────────────────────────
@@ -49,44 +53,44 @@ export type AIChatRequest = z.input<typeof AIChatRequestSchema>;
 export const AIContextEventSchema = z.discriminatedUnion("kind", [
   z.strictObject({
     kind: z.literal("page_view"),
-    atMs: z.number().int().nonnegative(),
+    atMs: nonNegativeInt,
     path: z.string(),
     title: z.string(),
   }),
   z.strictObject({
     kind: z.literal("click"),
-    atMs: z.number().int().nonnegative(),
+    atMs: nonNegativeInt,
     path: z.string(),
     label: z.string(),
     element: z.string(),
   }),
   z.strictObject({
     kind: z.literal("form_open"),
-    atMs: z.number().int().nonnegative(),
+    atMs: nonNegativeInt,
     path: z.string(),
     formId: z.string(),
   }),
   z.strictObject({
     kind: z.literal("form_submit"),
-    atMs: z.number().int().nonnegative(),
+    atMs: nonNegativeInt,
     formId: z.string(),
     success: z.boolean(),
-    errorCode: z.string().nullable(),
+    errorCode: z.nullable(z.string()),
   }),
   z.strictObject({
     kind: z.literal("typing"),
-    atMs: z.number().int().nonnegative(),
+    atMs: nonNegativeInt,
     formId: z.string(),
     field: z.string(),
   }),
   z.strictObject({
     kind: z.literal("status"),
-    atMs: z.number().int().nonnegative(),
+    atMs: nonNegativeInt,
     status: SessionStatusSchema,
   }),
   z.strictObject({
     kind: z.literal("closed"),
-    atMs: z.number().int().nonnegative(),
+    atMs: nonNegativeInt,
     reason: z.enum(["navigated_away", "inactivity_timeout", "tab_closed"]),
   }),
 ]);
@@ -105,24 +109,24 @@ export const AIContextSchema = z.strictObject({
     browser: z.string(),
     os: z.string(),
     /** Country code only; never city, name or visitor id. */
-    country: z.string().length(2),
-    referrer: z.string().nullable(),
+    country: z.string().check(z.length(2)),
+    referrer: z.nullable(z.string()),
     landingPath: z.string(),
     currentPath: z.string(),
-    durationMs: z.number().int().nonnegative(),
-    pageViews: z.number().int().nonnegative(),
+    durationMs: nonNegativeInt,
+    pageViews: nonNegativeInt,
   }),
-  events: z.array(AIContextEventSchema).max(MAX_AI_CONTEXT_EVENTS),
+  events: z.array(AIContextEventSchema).check(z.maxLength(MAX_AI_CONTEXT_EVENTS)),
   /** Events recorded for the session that aren't in `events` (older, or trimmed). */
-  omittedEvents: z.number().int().nonnegative(),
+  omittedEvents: nonNegativeInt,
 });
 export type AIContext = z.infer<typeof AIContextSchema>;
 
 /** Web server → ai-service. */
 export const AIServiceRequestSchema = z.strictObject({
-  requestId: z.string().regex(/^[\w-]{8,64}$/),
+  requestId: z.string().check(z.regex(/^[\w-]{8,64}$/)),
   action: AIActionSchema,
-  prompt: z.string().max(MAX_AI_PROMPT_LENGTH),
+  prompt: z.string().check(z.maxLength(MAX_AI_PROMPT_LENGTH)),
   context: AIContextSchema,
 });
 export type AIServiceRequest = z.infer<typeof AIServiceRequestSchema>;
@@ -170,23 +174,26 @@ export type GroundingClaimKind = z.infer<typeof GroundingClaimKindSchema>;
 export const UnverifiedClaimSchema = z.object({
   kind: GroundingClaimKindSchema,
   /** The words in the answer that make the claim (model output: render as text only). */
-  quote: z.string().max(300),
+  quote: z.string().check(z.maxLength(300)),
   /** Why it couldn't be verified, e.g. "no checkout was submitted successfully". */
-  reason: z.string().max(300),
+  reason: z.string().check(z.maxLength(300)),
 });
 export type UnverifiedClaim = z.infer<typeof UnverifiedClaimSchema>;
 
 export const MAX_UNVERIFIED_CLAIMS = 10;
 
 export const AIChunkSchema = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("delta"), text: z.string().min(1) }),
+  z.object({ type: z.literal("delta"), text: z.string().check(z.minLength(1)) }),
   z.object({
     type: z.literal("done"),
     finishReason: z.enum(["stop", "length"]),
     /** Which model answered, e.g. "mock" or the provider's model name. */
     model: z.string(),
     /** Claims in the complete answer that the session data doesn't support. */
-    unverified: z.array(UnverifiedClaimSchema).max(MAX_UNVERIFIED_CLAIMS).default([]),
+    unverified: z._default(
+      z.array(UnverifiedClaimSchema).check(z.maxLength(MAX_UNVERIFIED_CLAIMS)),
+      [],
+    ),
   }),
   z.object({ type: z.literal("error"), error: AIErrorSchema }),
 ]);

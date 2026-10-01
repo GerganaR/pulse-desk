@@ -14,7 +14,10 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json",
     "test": "vitest run",
-    "check:devtools-excluded": "node scripts/check-devtools-excluded.ts"
+    "check:devtools-excluded": "node scripts/check-devtools-excluded.ts",
+    "bundle:report": "node scripts/bundle-report.ts",
+    "check:bundle": "node scripts/bundle-report.ts --check",
+    "analyze": "RSDOCTOR=1 rspack build -c rspack.client.config.ts --node-env production"
   },
   "browserslist": [
     "chrome >= 111",
@@ -31,6 +34,7 @@
     "@pulsedesk/state": "workspace:*",
     "@pulsedesk/ui": "workspace:*",
     "@reduxjs/toolkit": "^2.13.0",
+    "@tanstack/react-virtual": "^3.14.13",
     "lucide-react": "^1.49.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
@@ -42,6 +46,7 @@
     "@pulsedesk/eslint-config": "workspace:*",
     "@pulsedesk/test-utils": "workspace:*",
     "@pulsedesk/typescript-config": "workspace:*",
+    "@rsdoctor/rspack-plugin": "^1.6.4",
     "@rspack/cli": "^2.2.8",
     "@rspack/core": "^2.2.8",
     "@rspack/dev-server": "^2.2.1",

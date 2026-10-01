@@ -9,11 +9,11 @@ import { act } from "react";
 import { hydrateRoot, type Root as ReactRoot } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { BrowserRouter, StaticRouter } from "react-router";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { AssetManifest, PublicConfig } from "@/lib/bootstrap";
 import { App } from "./App";
 import { Root } from "./Root";
-import { resolveRouteHandle } from "./routes";
+import { preloadAllRoutes, resolveRouteHandle } from "./routes";
 import type { ThemePreference } from "./theme";
 
 const assets: AssetManifest = { scripts: [], styles: ["/assets/css/main.css"] };
@@ -22,7 +22,11 @@ const sessions = generateSessions({ now: SERVER_NOW, seed: 42 });
 
 const pending = () => new Promise<never>(() => {});
 const api: PulseApi = { fetchSessionsSnapshot: pending, fetchSessionDetail: pending };
-const config: PublicConfig = { gatewayUrl: "ws://gateway.test/ws", devTools: false };
+const config: PublicConfig = {
+  gatewayUrl: "ws://gateway.test/ws",
+  devTools: false,
+  eventBatchMs: 32,
+};
 
 /** Inert WebSocket: hydration starts the realtime provider, but tests never touch the network. */
 class SilentWebSocket {
@@ -106,6 +110,11 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+// Pages are lazy chunks. The server loads them all before it accepts requests, and the
+// browser has the page's chunk among its initial scripts; the tests start from the same
+// place. Hydrating before a chunk has arrived is covered in lazy-route.test.tsx.
+beforeAll(preloadAllRoutes);
+
 describe("SSR hydration", () => {
   it.each([
     "/dashboard",
@@ -174,7 +183,15 @@ describe("resolveRouteHandle", () => {
     expect(resolveRouteHandle("/nope").status).toBe(404);
   });
 
-  it.each(["/dashboard", "/sessions", "/sessions/abc"])("returns 200 for %s", (path) => {
-    expect(resolveRouteHandle(path)).toEqual({ status: 200 });
+  it.each([
+    ["/dashboard", "dashboard"],
+    ["/sessions", "sessions"],
+    ["/sessions/abc", "session-detail"],
+  ])("returns 200 and the page's chunk for %s", (path, chunk) => {
+    expect(resolveRouteHandle(path)).toEqual({ status: 200, chunk });
+  });
+
+  it("names no chunk for pages in the main bundle", () => {
+    expect(resolveRouteHandle("/nope").chunk).toBeUndefined();
   });
 });
