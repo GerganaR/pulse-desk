@@ -48,8 +48,8 @@ Rules that are easy to break
 - Contracts are validated at every boundary (Zod). The AI context is built on the web
   server by toAIContext() from an allowlist; never spread a session into it.
 - Model output is untrusted: render it as text, never as HTML or Markdown.
-- The initial JS budget is exceeded on purpose (tracked in docs/performance.md). Never
-  raise a limit or silence a warning to get green.
+- The initial JS budget (350 KB minified, 60 KB per route) is enforced in CI
+  (docs/performance.md). Never raise a limit or silence a warning to get green.
 
 Known failure modes in this codebase
 - Hydration: nothing time- or locale-dependent in render without a server-provided value

@@ -2,6 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-09-30
+- **Last reviewed:** 2026-10-01 (Phase 9): slices and examples updated to what was built
 
 ## Context
 
@@ -18,17 +19,17 @@ PulseDesk has several kinds of state with very different lifetimes and audiences
 Putting everything in Redux makes every keystroke and hover an action, couples
 components to a global store they don't need, and makes SSR serialise noise. Putting
 nothing in Redux scatters network data across components and hooks, and makes
-reconnect/replay logic (Phase 3–4) hard to reason about.
+reconnect/replay logic hard to reason about.
 
 ## Decision
 
-| State                                                                   | Where it lives                                | Why                                                                                                                                                                    |
-| ----------------------------------------------------------------------- | --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Sessions, session events, connection status, notifications, AI requests | **Redux** (`packages/state`)                  | Shared, network-sourced, updated outside React's render cycle; needs deterministic reducers for dedup/ordering and a single serialisable snapshot for SSR              |
-| Menu open, input text, hover, chart/table toggle                        | **Component state**                           | Owned by one component; no one else cares                                                                                                                              |
-| Status filter and search query                                          | **URL search params**                         | Shareable, survives reload, works with back/forward, renders correctly on the server                                                                                   |
-| Theme preference                                                        | **React context + cookie**                    | UI preference; the cookie lets the server render the right theme with no flash                                                                                         |
-| Current time (for "8s ago")                                             | **External store via `useSyncExternalStore`** | Ticks every second; in Redux it would dispatch 3,600 actions/hour and re-run every selector. `getServerSnapshot` returns the server's render time so hydration matches |
+| State                                                                        | Where it lives                                | Why                                                                                                                                                                    |
+| ---------------------------------------------------------------------------- | --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Sessions, timelines, presence, connection status, notifications, AI requests | **Redux** (`packages/state`)                  | Shared, network-sourced, updated outside React's render cycle; needs deterministic reducers for dedup/ordering and a single serialisable snapshot for SSR              |
+| Menu open, input text, hover, chart/table toggle                             | **Component state**                           | Owned by one component; no one else cares                                                                                                                              |
+| Status filter and search query                                               | **URL search params**                         | Shareable, survives reload, works with back/forward, renders correctly on the server                                                                                   |
+| Theme preference                                                             | **React context + cookie**                    | UI preference; the cookie lets the server render the right theme with no flash                                                                                         |
+| Current time (for "8s ago")                                                  | **External store via `useSyncExternalStore`** | Ticks every second; in Redux it would dispatch 3,600 actions/hour and re-run every selector. `getServerSnapshot` returns the server's render time so hydration matches |
 
 Within Redux:
 
@@ -49,8 +50,8 @@ Within Redux:
 ## Alternatives considered
 
 - **RTK Query** for the snapshot. Good fit for request/response caching, but most data
-  here arrives as a _stream_ that must be merged, deduplicated and ordered by sequence
-  (Phase 3–4). A hand-written slice keeps that logic explicit and testable. RTK Query
+  here arrives as a _stream_ that must be merged, deduplicated and ordered by sequence.
+  A hand-written slice keeps that logic explicit and testable. RTK Query
   remains a reasonable choice for future CRUD-style endpoints.
 - **Zustand / Jotai.** Lighter weight, but RTK's entity adapters, action log (DevTools
   replay of a reconnect sequence is valuable for debugging) and the explicit role
@@ -61,8 +62,18 @@ Within Redux:
 
 - Contributors need a rule of thumb, and this is it: _if another route or the network cares,
   it's Redux; if only this component cares, it's local; if it should be in a link, it's the URL._
-- Realtime events (Phase 3) must be batched before dispatch so bursts don't produce
-  hundreds of actions and renders.
+- Realtime events must be batched before dispatch so bursts don't produce hundreds of
+  actions and renders. That became [ADR-005](005-event-batching.md): one
+  `eventsReceived(batch)` action per 32 ms window, handled by several slices at once.
+- Things that aren't serialisable stay out of the store and next to it: the realtime
+  client lives in a provider, and the copilot's `AbortController`s and per-frame text
+  buffer live in a per-tab runner. The store holds their state, not the objects.
+- Memory is bounded on purpose, because a console tab stays open for days: timelines
+  exist only for sessions someone opened and are capped at 10,000 entries, and ended
+  sessions are aged out client-side with the gateway's own retention rules.
+- Immer is bypassed in exactly one reducer. Appending to a 10,000-entry timeline through
+  a draft cost 18 ms per flush; building the array natively and freezing it costs 0.2 ms
+  (measured in `tests/load`). Everywhere else the drafts stay.
 
 ## Tradeoffs
 

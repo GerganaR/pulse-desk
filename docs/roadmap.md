@@ -13,9 +13,9 @@ file in the same PR.
 | 4     | Reliability: reconnect, replay, heartbeat, fault injection         | ✅ Done |
 | 5     | AI copilot: service, HTTP streaming, copilot UI                    | ✅ Done |
 | 6     | AI quality: evaluation, hallucination regressions, AI workflow     | ✅ Done |
-| 7     | Performance: batching at scale, virtualisation, splitting, budgets | Next    |
+| 7     | Performance: batching at scale, virtualisation, splitting, budgets | ✅ Done |
 | 8     | Testing: gap-filling, a11y automation, CI for the full stack       | ✅ Done |
-| 9     | Documentation: README, architecture, ADRs, demo script             |         |
+| 9     | Documentation: README, architecture, ADRs, demo script             | ✅ Done |
 | 10    | Polish: accessibility, mobile, states, security, code quality      |         |
 
 ## Adjustments to the original phase plan
@@ -180,6 +180,41 @@ Changes made during Phase 8:
 39. **Full-stack E2E in CI needed no new work.** It arrived with Phases 3–5 (gateway,
     seeded simulator, ai-service and two web builds under Playwright's `webServer`).
     Phase 8 added the outage server and uploads traces when a run fails.
+
+Changes made during Phase 9 (done on its own branch, in parallel with Phase 8):
+
+40. **The Phase 7 write-up in `performance.md` was done here.** The Phase 7 commit added
+    the tooling and the measurements but not the document, and the README needs the
+    numbers. The bundle figures were re-measured on the Phase 7 commit (deterministic);
+    the browser and headless figures are the ones recorded locally at the end of Phase 7
+    (`tests/load/results`, gitignored), labelled as one machine's measurements.
+41. **Four new ADRs, not two.** Besides batching (005), the decisions that most shaped the
+    code and had no record: the single-writer sequence with cursors (006), devtools as a
+    build-time constant with a second build (007), and the rule-based grounding guard
+    (008). NDJSON vs SSE was already ADR-004. ADRs 001–003 were brought up to what was
+    built (they still spoke of Phases 3–7 in the future tense) and carry a "last
+    reviewed" date instead of being rewritten: the original reasoning stands.
+42. **The demo script is new, not transcribed.** The brief's 20-step script isn't in the
+    repository (see the Phase 5 outcome), so `docs/demo.md` was written from the app and
+    checked against a running stack. One step changed because of that check: restarting
+    the gateway while a session page is open ends at "Session not found" (correct: the
+    session is gone with the old stream), so the script does the restart from the
+    dashboard.
+43. **Screenshots and the GIF are captured by script from the production and devtools
+    builds**, on spare ports, with a seeded simulator. They live in `docs/images/`
+    (about 2.7 MB in total, the GIF is 2 MB). The capture script is not committed: it was
+    a one-off, and stale screenshots are better regenerated on purpose than by a task
+    nobody runs.
+44. **The architecture diagrams are ASCII**, as the plan said, in the README too. They
+    diff, they render everywhere, and they can't drift into a separate tool.
+45. **Written against Phase 7, then reconciled with Phase 8.** The two phases ran in
+    parallel. When Phase 8 merged, this branch was moved onto it: the README's testing
+    section, commands and status were updated to the merged state, the screenshots and
+    GIF were recaptured (Phase 8 darkened four light-theme colours for contrast), the
+    bundle was re-measured, and these items were renumbered after Phase 8's. Stale
+    statements found on the way were fixed where they stood (the bundle being "over
+    budget" in the prompts and two docs, client-side retention as future work, Phase 7
+    still marked "Next" in the table above).
 
 ## Ports and processes (target for `pnpm dev`)
 
@@ -675,6 +710,38 @@ closed and are listed below with what is known.
 - `docs/demo.md`: the 20-step interview walkthrough, with the exact clicks and what to
   say at each step.
 
+### Outcome
+
+Delivered as planned, with the adjustments above (items 40–45).
+
+- **README** in final form: overview, demo GIF, six screenshots, architecture diagram,
+  technology choices (each linked to its ADR), reliability, AI architecture, AI
+  workflow, performance, testing, running locally, environment variables, repository
+  structure, tradeoffs and future improvements. Three variables that existed but
+  weren't documented were added (`PUBLIC_EVENT_BATCH_MS`, `SSR_TIMEOUT_MS`,
+  `AI_MAX_CONCURRENT_STREAMS`).
+- **[architecture.md](architecture.md):** apps, packages, the page-request, live-feed
+  and copilot flows as ASCII diagrams, Redux boundaries, a failure table, security
+  boundaries (including what isn't there: no authentication, no rate limits), and the
+  scaling section. That section lists the demo's structural limits, the production
+  path, what would carry over, and says that none of the production path is built.
+- **ADRs:** 001–004 reviewed and updated; 005–008 added.
+- **[demo.md](demo.md):** 20 steps with clicks and words, a recovery table for when the
+  demo goes wrong, and the questions it tends to raise.
+- **[performance.md](performance.md):** the Phase 7 results (item 40).
+- **Checked:** every relative link and anchor in the docs resolves; `pnpm format:check`
+  passes; the demo's flow (dashboard → session → copilot answer → disconnect →
+  reconnect → replay) was run end to end against the devtools build while recording
+  the GIF; the gateway-restart step and the filter URL were run against the production
+  build.
+- **Not checked:** the demo script's individual steps were not each replayed by a
+  person, and steps 11, 14, 15, 18 and 19 were not exercised in this phase beyond what
+  the existing E2E specs cover. The demo assumes `pnpm dev`, which was not started here
+  (verification used the built servers on spare ports, per the working agreement).
+- **No code changed.** After moving onto the Phase 8 merge: 675 unit and component
+  tests pass, 94 E2E tests are listed (not re-run here; Phase 8 ran them), and initial
+  JS is 337.9 KB.
+
 ---
 
 ## Phase 10 — Polish
@@ -724,6 +791,8 @@ closed and are listed below with what is known.
 | The `tests/` workspace has no ESLint configuration, so E2E and load specs are type-checked but not linted                                                                                                                     | Phase 8 | Phase 10                       |
 | Delete generated mock session source                                                                                                                                                                                          | Phase 2 | Phase 3                        |
 | Commit Phases 1–2                                                                                                                                                                                                             | Phase 2 | Before Phase 3                 |
+| After a gateway restart, an open session page ends at "Session not found" while the toast says sessions were reloaded: correct, but the two messages don't explain each other                                                 | Phase 9 | Phase 10 (state consistency)   |
+| Lighthouse has never been run; real-device performance not measured                                                                                                                                                           | Phase 7 | Phase 10                       |
 
 ### Risks
 

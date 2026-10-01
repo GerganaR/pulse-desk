@@ -2,6 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-09-30
+- **Last reviewed:** 2026-10-01 (Phase 9): data prefetch and lazy routes updated to what was built
 
 ## Context
 
@@ -37,8 +38,10 @@ builds the pipeline by hand to own and explain each layer.
 4. **Declarative router, not React Router data APIs.** Server: `<StaticRouter>`; client:
    `<BrowserRouter>`. HTTP concerns (redirects, 404) are declared as `handle` metadata on
    the same route table and resolved by the server before rendering. Server-side data
-   will be prefetched into the Redux store and serialised (see ADR-002), keeping Redux as
-   the single source of domain truth rather than adding a parallel loader cache.
+   is prefetched into a per-request Redux store and serialised (see ADR-002), keeping
+   Redux as the single source of domain truth rather than adding a parallel loader cache.
+   The prefetch has a **time budget** (250 ms): past it, the requests are aborted and the
+   page streams with skeletons, so time to first byte never waits on a slow backend.
 
 5. **One `<Root>` for both entries.** Server and client render the identical tree; only
    the router differs. This is the primary structural defence against hydration
@@ -52,14 +55,24 @@ builds the pipeline by hand to own and explain each layer.
    its own port; the server bundle is watch-built and the SSR process restarted after
    each successful rebuild.
 
+8. **Lazy routes that still render in the first flush** (Phase 7). Each page is its own
+   chunk, wrapped by `lazyRoute()`: `React.lazy` alone always suspends once, even for a
+   loaded module, which would put every page behind a fallback that needs JavaScript to
+   resolve. The server preloads all routes at startup and renders them synchronously;
+   the page's chunk is added to the bootstrap scripts (all `async`), so the browser
+   fetches it in parallel with the main bundle. `progressiveChunkSize` is set to
+   infinity so React never defers a completed boundary's HTML behind an inline script.
+   The realtime connection is a further chunk, sent as a low-priority preload and run
+   after hydration.
+
 ## What renders where
 
-| Rendered on the server                   | Starts only after hydration              |
-| ---------------------------------------- | ---------------------------------------- |
-| App shell, navigation, page structure    | WebSocket connection and live updates    |
-| Page titles/meta                         | Connection status transitions            |
-| Initial sessions snapshot (from Phase 3) | AI copilot requests and streaming        |
-| Empty / not-found states                 | Dev reliability panel (development only) |
+| Rendered on the server                 | Starts only after hydration             |
+| -------------------------------------- | --------------------------------------- |
+| App shell, navigation, page structure  | WebSocket connection and live updates   |
+| Page titles/meta                       | Connection status transitions           |
+| Sessions snapshot and session timeline | AI copilot panel (SSR sends a skeleton) |
+| Empty, error and not-found states      | Dev reliability panel (devtools builds) |
 
 ## Alternatives considered
 
@@ -83,12 +96,16 @@ builds the pipeline by hand to own and explain each layer.
 - Hydration safety depends on discipline (no `Date.now()`/locale formatting in render
   without a server-provided value). It's enforced by jsdom hydration tests and by E2E
   tests that fail on any console error.
-- Route-level code splitting uses `React.lazy`; streaming SSR and selective hydration
-  support this without extra router machinery.
+- Route-level code splitting needs no router machinery, but it did need `lazyRoute()`
+  (decision 8) and a manifest that maps route chunks to scripts. If the route chunk
+  arrives after the main bundle, selective hydration hydrates the shell first.
+- The server must know the client's assets. In production it reads the manifest once;
+  in development it fetches it from the dev server on every request, and answers 503
+  with a refresh while the first compile is still running.
 
 ## Tradeoffs
 
 Full control and a hermetic server artefact, at the cost of more code than a framework.
-The pipeline is roughly 300 lines, and every line can be explained. That is appropriate
+The pipeline is roughly 600 lines, and every line can be explained. That is appropriate
 for this project, but not a general recommendation for product teams without a reason
 to own SSR.

@@ -2,6 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-09-30
+- **Last reviewed:** 2026-10-01 (Phase 9): still current
 
 ## Context
 
@@ -63,7 +64,14 @@ is still incomplete, and we need _ordered, reliable_ delivery anyway.
 
 - **We own reconnection, resume and heartbeat.** This is deliberate and documented in
   `realtime-reliability.md`. Sequences plus cursors give the same resume semantics as
-  `Last-Event-ID`, plus gap detection mid-stream.
+  `Last-Event-ID`, plus gap detection mid-stream
+  ([ADR-006](006-single-writer-sequence-and-cursors.md)).
+- **The transport is injectable, and that paid off twice:** unit tests drive the client
+  with a fake socket and fake timers, and the dev reliability panel wraps the real one to
+  inject faults ([ADR-007](007-devtools-build-time-constant.md)).
+- **The WebSocket is cross-origin** (the browser connects to the gateway directly, not
+  through the web server), so the gateway's origin is the one external entry in the
+  page's `connect-src`.
 - **Load balancing needs care at scale.** WebSockets are long-lived, so load isn't
   rebalanced by new requests. The production path is stateless gateways (all state in
   the shared log and presence store) so any instance can take any reconnect, plus

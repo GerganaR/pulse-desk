@@ -66,8 +66,8 @@ saw**, before the stream ends. Code and fixtures: `apps/ai-service/src/evaluatio
   already marked incomplete.
 - **Why in ai-service, not the browser:** the checker needs the context the model was
   given (the browser only has its own, possibly newer, copy of the session), and it would
-  add to an initial bundle that's already over budget. The copilot chunk grew 0.3 KB
-  gzipped for the flag UI; the checker adds nothing to the client.
+  have added to an initial bundle that was over budget at the time. The copilot chunk grew
+  0.3 KB gzipped for the flag UI; the checker adds nothing to the client.
 - **Regression suite** (`regression.test.ts`, in CI): nine fixtures shaped like the
   simulator's journeys, each asked every quick action and one or two questions, answered
   by the mock provider. Any unverified claim, forbidden outcome or banned phrase fails
@@ -157,7 +157,7 @@ stream as `aborted`; removing ai-service's abort-on-disconnect makes that test f
   animation frame** per request, and flushes before a request ends, so a failed or
   cancelled answer keeps every character that arrived. It outlives the panel: leaving the
   page doesn't stop an answer.
-- **Panel**: lazy chunk (5.7 KB gzipped), rendered after hydration. Answers are plain text
+- **Panel**: lazy chunk (7.5 KB gzipped, including its AI schemas), rendered after hydration. Answers are plain text
   (`pre-wrap`), never HTML or Markdown: model output is untrusted, and it quotes visitor
   strings. While streaming, the answer is `aria-busy` and only the outcome is announced
   ("Answer ready.", "Answer failed: …").
