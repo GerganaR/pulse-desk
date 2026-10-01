@@ -2,6 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-09-30
+- **Last reviewed:** 2026-10-01 (Phase 9): still current
 
 ## Context
 

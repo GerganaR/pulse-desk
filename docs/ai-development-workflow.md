@@ -40,13 +40,14 @@ These are standing instructions (in the prompts' shared context block), each the
 because the alternative went wrong or nearly did:
 
 - **The roadmap is the source of truth.** Every decision that changes the plan becomes
-  a numbered item in [roadmap.md](roadmap.md) in the same change (items 1–32 so far),
+  a numbered item in [roadmap.md](roadmap.md) in the same change,
   so a later session can't silently undo an earlier decision.
 - **Verify, then report, including failures.** A report says what ran, what it printed
   and what wasn't checked. A failing test isn't retried until green or given a longer
   timeout; it's diagnosed.
-- **No green by weakening the bar.** The bundle budget has been exceeded since Phase 2.
-  The warning stays on and the limit hasn't been raised; Phase 7 owns the fix.
+- **No green by weakening the bar.** The bundle budget was exceeded from Phase 2 to
+  Phase 6. The warning stayed on and the limit was never raised; Phase 7 brought the
+  bundle under it (474.7 KB → 337.8 KB in that phase) and CI enforces it now.
 - **The human owns irreversible actions.** The assistant doesn't commit, push or delete.
   It stops only processes it started, found by the PID on their port, never with a
   pattern kill that would take down the developer's own `pnpm dev`.

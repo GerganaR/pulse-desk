@@ -8,7 +8,9 @@ lost frames, duplicates and reordering. The guarantee is simple to state:
 
 Code: `packages/realtime-client` (client), `apps/realtime-gateway/src/websocket`
 (server), `apps/web/src/features/realtime` (UI). Protocol: `packages/contracts/src/protocol.ts`.
-Transport choice: [ADR-001](adr/001-websocket-vs-sse.md).
+Transport choice: [ADR-001](adr/001-websocket-vs-sse.md). Sequences and cursors:
+[ADR-006](adr/006-single-writer-sequence-and-cursors.md). Where this sits in the system:
+[architecture.md](architecture.md).
 
 ## The foundation: one contiguous sequence
 
@@ -212,10 +214,13 @@ pausing, the presence grace or (for the flagship) cursor resume each makes a tes
 ## Known limits and production path
 
 - **Single gateway, in-memory log.** Replay depth is the ring buffer (10,000 events);
-  past that, a snapshot. The production path (Phase 9 docs) is a durable partitioned log
-  (Redis Streams, Kafka) with per-partition cursors, and gateways fanned out through
-  pub/sub. The client protocol already carries the pieces that needs (`streamId`,
-  cursors, snapshots with positions).
+  past that, a snapshot. The production path is a durable partitioned log (Redis
+  Streams, Kafka) with per-partition cursors, and gateways fanned out through pub/sub.
+  The client protocol already carries the pieces that needs (`streamId`, cursors,
+  snapshots with positions). See
+  [architecture.md](architecture.md#scaling-what-this-demo-is-and-what-production-would-need)
+  and [ADR-006](adr/006-single-writer-sequence-and-cursors.md).
 - **Presence identity is unauthenticated** (it comes from the client's `hello`).
-- **Client-side retention** of ended sessions in long-lived tabs is Phase 7 work.
+- **Client-side retention** of ended sessions was added in Phase 7: a long-lived tab ages
+  them out with the gateway's own rules (6 hours, at most 300).
 - **Heartbeat thresholds are fixed**, not adaptive to the connection's normal RTT.
