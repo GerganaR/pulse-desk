@@ -13,6 +13,10 @@ export interface EvalSummary {
   passed: number;
   /** Provider failures (timeouts, HTTP errors); not scored. */
   errors: number;
+  /** Answers the provider cut at its output limit: scored, but incomplete. */
+  truncated: number;
+  /** Extra attempts after the provider asked to slow down (429, 503). */
+  retries: number;
   claims: number;
   unverifiedClaims: number;
   bannedPhrases: number;
@@ -36,6 +40,8 @@ export function summarise(results: readonly CaseResult[]): EvalSummary {
     cases: results.length,
     passed: scored.filter(passed).length,
     errors: results.filter((r) => r.error !== null).length,
+    truncated: results.filter((r) => r.finishReason === "length").length,
+    retries: results.reduce((n, r) => n + r.attempts - 1, 0),
     claims: scored.reduce((n, s) => n + s.claims.length, 0),
     unverifiedClaims: scored.reduce((n, s) => n + s.unverified.length, 0),
     bannedPhrases: scored.reduce((n, s) => n + s.banned.length, 0),
@@ -83,7 +89,9 @@ export function renderMarkdown(info: EvalRunInfo, results: readonly CaseResult[]
     `| Unverified claims | ${summary.unverifiedClaims} |`,
     `| Banned phrases | ${summary.bannedPhrases} |`,
     `| Expected summary facts mentioned | ${summary.mentions.found} / ${summary.mentions.expected} |`,
+    `| Answers cut at the output limit | ${summary.truncated} |`,
     `| Provider errors | ${summary.errors} |`,
+    `| Retries after rate limiting or overload | ${summary.retries} |`,
     `| Latency p50 / p95 | ${summary.latencyMs.p50} ms / ${summary.latencyMs.p95} ms |`,
     "",
     "## By fixture",
@@ -113,6 +121,19 @@ export function renderMarkdown(info: EvalRunInfo, results: readonly CaseResult[]
       );
     for (const phrase of r.score?.banned ?? []) lines.push(`- **Banned phrase** ${phrase}`);
     lines.push("", "Answer:", "", indent(r.answer || "(empty)"), "");
+  }
+
+  const cut = results.filter((r) => r.finishReason === "length");
+  if (cut.length > 0) {
+    lines.push(
+      "## Answers cut at the output limit",
+      "",
+      "Scored, but incomplete: a claim may be missing its end. Models that reason before",
+      "answering spend the limit on reasoning; raise OPENAI_MAX_OUTPUT_TOKENS.",
+      "",
+    );
+    for (const r of cut) lines.push(`- ${caseName(r)}: ${r.answer.length} characters`);
+    lines.push("");
   }
 
   const gaps = results.filter((r) => r.score && r.score.missing.length > 0);

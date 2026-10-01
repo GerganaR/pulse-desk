@@ -2,7 +2,7 @@
 
 <!-- One paragraph: what changes, and the problem it solves. Link the roadmap phase or item. -->
 
-Roadmap: <!-- e.g. Phase 6, items 24–29 -->
+Roadmap: <!-- e.g. Phase 6, items 24–32 -->
 
 ## Decisions
 

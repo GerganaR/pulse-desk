@@ -80,9 +80,17 @@ provider uses temperature 0.2, and providers change models behind the same name.
 real provider:
 
 - one clean run proves little; use `pnpm eval --repeat 5` and read pass _rates_;
+- a free tier's quota shapes what you can run: at 5 requests a minute the 59 cases take
+  about 12 minutes (`--rpm 5`), and `--repeat` multiplies that;
+- an answer cut at the output limit is scored on what arrived, so a claim can lose its
+  end ("they haven't pa…"). The report lists these; treat them as not evaluated;
 - a report is a snapshot of one model on one date (both are in the report);
 - the real-provider run is local and opt-in (it needs a key and costs money), not a CI
   gate.
+
+What has actually been run against a real model so far: 7 answers from
+`gemini-3.5-flash-lite` over two fixtures, all clean. That shows the pipeline works with
+a real model. It says almost nothing yet about how often one hallucinates.
 
 ## Fixture coverage
 

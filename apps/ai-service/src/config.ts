@@ -6,7 +6,7 @@ const number = (value: string | undefined, fallback: number) => {
 
 export type ProviderConfig =
   | { kind: "mock"; tokenMs: number; firstTokenDelayMs: number }
-  | { kind: "openai"; apiKey: string; model: string; baseUrl: string };
+  | { kind: "openai"; apiKey: string; model: string; baseUrl: string; maxOutputTokens: number };
 
 export interface AIServiceConfig {
   host: string;
@@ -47,6 +47,9 @@ function providerConfig(): ProviderConfig {
       apiKey,
       model,
       baseUrl: (env.OPENAI_BASE_URL ?? "https://api.openai.com/v1").replace(/\/$/, ""),
+      // Models that reason before answering spend this on reasoning too; raise it if
+      // answers stop at the length limit.
+      maxOutputTokens: number(env.OPENAI_MAX_OUTPUT_TOKENS, 600),
     };
   }
   throw new ConfigError(`Unknown AI_PROVIDER "${kind}" (expected "mock" or "openai")`);

@@ -40,7 +40,7 @@ These are standing instructions (in the prompts' shared context block), each the
 because the alternative went wrong or nearly did:
 
 - **The roadmap is the source of truth.** Every decision that changes the plan becomes
-  a numbered item in [roadmap.md](roadmap.md) in the same change (items 1–29 so far),
+  a numbered item in [roadmap.md](roadmap.md) in the same change (items 1–32 so far),
   so a later session can't silently undo an earlier decision.
 - **Verify, then report, including failures.** A report says what ran, what it printed
   and what wasn't checked. A failing test isn't retried until green or given a longer
@@ -130,6 +130,31 @@ failure were real:
 Then the "done when" mutation: removing the success guard from the mock's outcome line
 makes it claim a purchase for a declined checkout, and four tests fail, including the
 HTTP-level test of the runtime guard.
+
+### The first live run failed 58 times out of 59, usefully
+
+The OpenAI-compatible provider had only ever met a fake stream. Its first real run, on a
+free Gemini key, sent the evaluation's 59 requests four at a time into a quota of five a
+minute. One answer came back. The fixes were to the tooling, not the bar: one request at
+a time for real providers, `--rpm` pacing, and retries that wait as long as the provider
+asks (Gemini says so in the error text, which the provider now reads without ever
+showing the rest of that text to a user). A later run lost seven cases to a dropped
+connection, so those are retried too.
+
+Two things from that hour are written down as not known rather than smoothed over: one
+model returned an answer cut off at both ends and then became too overloaded to
+investigate, and the full 59 cases still haven't been run against a real model.
+
+### Two environment problems that looked like code problems
+
+- `pnpm dev` died in a second with nothing but an exit code. Turbo's full-screen view
+  hid the error; with `--ui=stream` it was `EMFILE`: the machine had run out of
+  file-watcher instances. Ports, the install and the Node version had all been checked
+  first, and were all fine. It's in the README now.
+- The development console filled with Content-Security-Policy violations. They were
+  real: the dev policy allowed the asset server only as a WebSocket origin, so source maps
+  fetched over HTTP were blocked. One line, development only; the production policy was
+  checked to be unchanged.
 
 ## What the assistant is not used for
 

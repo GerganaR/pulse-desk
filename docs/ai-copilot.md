@@ -74,9 +74,12 @@ saw**, before the stream ends. Code and fixtures: `apps/ai-service/src/evaluatio
   CI. Removing the mock's success guard (so it reports a declined checkout as a
   purchase) fails it.
 - **`pnpm eval`**: the same cases against a real provider (with `OPENAI_API_KEY` and
-  `OPENAI_MODEL`; otherwise the mock), `--repeat N` for nondeterminism. Writes a Markdown
-  and JSON report to `apps/ai-service/eval-reports/` (gitignored) and exits 1 on any
-  unverified claim.
+  `OPENAI_MODEL`, from the environment or `.env`; otherwise the mock), `--repeat N` for
+  nondeterminism. Writes a Markdown and JSON report to `apps/ai-service/eval-reports/`
+  (gitignored) and exits 1 on any unverified claim. Real providers are asked one case at
+  a time; `--rpm N` paces requests under a quota; rate limits, overload and dropped
+  connections are retried after the wait the provider asks for. The report lists answers
+  cut at the output limit.
 - **Metric**: `ai.answer.unverified_claims` (histogram per action); the request log line
   carries `unverifiedClaims` when there are any.
 
@@ -93,8 +96,34 @@ What rule-based checking can't catch, and why it isn't an LLM judge:
   its keyword routing.
 - **OpenAI-compatible**: Chat Completions streaming (SSE) via `fetch`, no SDK. Enabled
   with `AI_PROVIDER=openai`, `OPENAI_API_KEY`, `OPENAI_MODEL` (and optionally
-  `OPENAI_BASE_URL`). The key stays in ai-service. It's unit-tested against a fake
-  stream; it hasn't been run against the real API in this repository's CI.
+  `OPENAI_BASE_URL`). The key stays in ai-service. CI tests it against a fake stream
+  only. It has been run by hand against Google Gemini's OpenAI-compatible endpoint
+  (`gemini-3.5-flash-lite`, free tier): streaming, the copilot UI and the grounding check
+  all work with it.
+
+### Using a real model in development
+
+Copy `apps/ai-service/.env.example` to `apps/ai-service/.env` (gitignored), add a key, and
+restart `pnpm dev`. `pnpm dev` and `pnpm eval` read the file; `pnpm start` and the E2E
+suite never do, so tests always use the mock and can't spend a quota. Variables set on
+the command line win over the file.
+
+```ini
+AI_PROVIDER=openai
+OPENAI_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai
+OPENAI_MODEL=gemini-3.5-flash-lite
+OPENAI_API_KEY=...
+```
+
+Things a free tier teaches quickly:
+
+- **Quotas are per model and small** (5 requests a minute for one Gemini model when this
+  was written). The copilot shows "The AI provider is rate limiting requests" with Retry;
+  switching `OPENAI_MODEL` uses a different quota.
+- **Models that reason before answering** spend the output limit on reasoning. If answers
+  stop at the length limit, raise `OPENAI_MAX_OUTPUT_TOKENS` (default 600).
+- **Session data leaves the machine.** It has passed `toAIContext()` first, so no ids,
+  names or cities; in development it is simulated traffic anyway.
 
 ## Time limits
 

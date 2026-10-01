@@ -25,9 +25,11 @@ const servePublic = sirv(config.publicDir, {
 });
 
 const assetOrigins = config.isProd ? [] : [config.clientDevOrigin];
+// Development only: the asset server over HTTP (hot-update manifests, and the source
+// maps DevTools fetches) and over WebSocket (the HMR socket).
 const connectOrigins = [
   new URL(config.publicConfig.gatewayUrl).origin,
-  ...(config.isProd ? [] : [config.clientDevOrigin.replace(/^http/, "ws")]),
+  ...(config.isProd ? [] : [config.clientDevOrigin, config.clientDevOrigin.replace(/^http/, "ws")]),
 ];
 
 const sessions = createGatewaySessionsSource({ baseUrl: config.gatewayHttpUrl, timeoutMs: 3_000 });

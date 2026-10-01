@@ -4,12 +4,12 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "AI_DEBUG=1 node --watch --enable-source-maps src/main.ts",
+    "dev": "AI_DEBUG=1 node --env-file-if-exists=.env --watch --enable-source-maps src/main.ts",
     "start": "node src/main.ts",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "eval": "node src/evaluation/run.ts"
+    "eval": "node --env-file-if-exists=.env src/evaluation/run.ts"
   },
   "dependencies": {
     "@pulsedesk/contracts": "workspace:*",

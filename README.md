@@ -27,17 +27,23 @@ pnpm install
 pnpm dev           # web, realtime gateway, event simulator, ai-service → http://localhost:3000
 ```
 
-| Command               | What it does                                                                        |
-| --------------------- | ----------------------------------------------------------------------------------- |
-| `pnpm dev`            | SSR server on `:3000`, client assets + HMR on `:3001`                               |
-| `pnpm build`          | Production client + server bundles (Rspack)                                         |
-| `pnpm build:devtools` | Same, with the reliability panel compiled in (`dist-devtools/`, used by E2E)        |
-| `pnpm start`          | Build (if needed) and run the production server                                     |
-| `pnpm check`          | Lint, typecheck and unit/component tests for every package                          |
-| `pnpm e2e`            | Playwright against the production build (`pnpm build && pnpm build:devtools` first) |
-| `pnpm eval`           | Grounding evaluation against a real model if `OPENAI_*` is set, else the mock       |
+| Command               | What it does                                                                                                      |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `pnpm dev`            | SSR server on `:3000`, client assets + HMR on `:3001`                                                             |
+| `pnpm build`          | Production client + server bundles (Rspack)                                                                       |
+| `pnpm build:devtools` | Same, with the reliability panel compiled in (`dist-devtools/`, used by E2E)                                      |
+| `pnpm start`          | Build (if needed) and run the production server                                                                   |
+| `pnpm check`          | Lint, typecheck and unit/component tests for every package                                                        |
+| `pnpm e2e`            | Playwright against the production build (`pnpm build && pnpm build:devtools` first)                               |
+| `pnpm eval`           | Grounding evaluation against a real model if `OPENAI_*` is set, else the mock. `--rpm 5` paces it for a free tier |
 
 If port 3000 is taken: `PORT=3100 pnpm dev`.
+
+If `pnpm dev` exits within a second with `@pulsedesk/web#dev` failed (Linux): Turbo's
+full-screen view hides the cause, so run `pnpm turbo run dev --ui=stream` to see it. If
+it says `EMFILE: too many open files, watch …`, the machine is out of file-watcher
+instances (editors hold most of the default 128). Raise the limit with
+`sudo sysctl fs.inotify.max_user_instances=512`, or close an editor.
 
 ## Repository structure
 
@@ -161,17 +167,22 @@ Each service reads its own variables; `pnpm dev` passes them through Turborepo.
 
 **ai-service**
 
-| Variable                    | Default                     | Purpose                                                                                                  |
-| --------------------------- | --------------------------- | -------------------------------------------------------------------------------------------------------- |
-| `AI_SERVICE_PORT`           | `4100`                      | HTTP port                                                                                                |
-| `AI_PROVIDER`               | `mock`                      | `mock` or `openai` (any OpenAI-compatible endpoint)                                                      |
-| `OPENAI_API_KEY`            | —                           | Required with `AI_PROVIDER=openai` (and for `pnpm eval` against a real model); never reaches the browser |
-| `OPENAI_MODEL`              | —                           | Required with `AI_PROVIDER=openai` and for `pnpm eval`                                                   |
-| `OPENAI_BASE_URL`           | `https://api.openai.com/v1` | Chat Completions endpoint                                                                                |
-| `AI_FIRST_TOKEN_TIMEOUT_MS` | `10000`                     | No first token by then → `timeout` error in the stream                                                   |
-| `AI_TOTAL_TIMEOUT_MS`       | `45000`                     | Hard limit for one answer                                                                                |
-| `AI_MOCK_TOKEN_MS`          | `35`                        | Mock provider pacing per token                                                                           |
-| `AI_DEBUG`                  | off (`1` in `pnpm dev`)     | Dev fault injection and `/debug/requests/:id`. Never in production                                       |
+| Variable                    | Default                     | Purpose                                                                                                                   |
+| --------------------------- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `AI_SERVICE_PORT`           | `4100`                      | HTTP port                                                                                                                 |
+| `AI_PROVIDER`               | `mock`                      | `mock` or `openai` (any OpenAI-compatible endpoint)                                                                       |
+| `OPENAI_API_KEY`            | —                           | Required with `AI_PROVIDER=openai` (and for `pnpm eval` against a real model); never reaches the browser                  |
+| `OPENAI_MODEL`              | —                           | Required with `AI_PROVIDER=openai` and for `pnpm eval`                                                                    |
+| `OPENAI_BASE_URL`           | `https://api.openai.com/v1` | Chat Completions endpoint                                                                                                 |
+| `OPENAI_MAX_OUTPUT_TOKENS`  | `600`                       | Output limit per answer. Models that reason first spend it on reasoning too; raise it if answers stop at the length limit |
+| `AI_FIRST_TOKEN_TIMEOUT_MS` | `10000`                     | No first token by then → `timeout` error in the stream                                                                    |
+| `AI_TOTAL_TIMEOUT_MS`       | `45000`                     | Hard limit for one answer                                                                                                 |
+| `AI_MOCK_TOKEN_MS`          | `35`                        | Mock provider pacing per token                                                                                            |
+| `AI_DEBUG`                  | off (`1` in `pnpm dev`)     | Dev fault injection and `/debug/requests/:id`. Never in production                                                        |
+
+To use a real model in development, copy `apps/ai-service/.env.example` to
+`apps/ai-service/.env` (gitignored) and add your key. `pnpm dev` and `pnpm eval` read it;
+`pnpm start` and the E2E suite never do, so tests always run against the mock.
 
 **event-simulator**
 

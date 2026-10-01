@@ -27,6 +27,15 @@ export async function* readLines(body: ReadableStream<Uint8Array>): AsyncGenerat
   if (buffer) yield buffer;
 }
 
+/**
+ * The wait a provider asks for: a `Retry-After` header in seconds, or a "retry in 18.9s"
+ * in the error body (how Gemini's OpenAI-compatible endpoint reports its quota).
+ */
+export function retryAfterMs(header: string | null, body: string): number | null {
+  const seconds = Number(header ?? /retry in ([\d.]+)\s*s/i.exec(body)?.[1]);
+  return Number.isFinite(seconds) && seconds > 0 ? Math.ceil(seconds * 1_000) : null;
+}
+
 interface CompletionChunk {
   choices?: { delta?: { content?: string | null }; finish_reason?: string | null }[];
 }
@@ -64,15 +73,19 @@ export function createOpenAIProvider({
         });
       } catch (error) {
         if (signal.aborted) throw error;
-        throw new ProviderError("The AI provider couldn't be reached");
+        throw new ProviderError("The AI provider couldn't be reached", 0);
       }
       if (!response.ok || !response.body) {
-        await response.body?.cancel();
+        // The body may hold details that aren't safe to show; only the wait time is read.
+        const detail = await response.text().catch(() => "");
         throw new ProviderError(
           response.status === 429
             ? "The AI provider is rate limiting requests"
-            : `The AI provider responded ${response.status}`,
+            : response.status === 503
+              ? "The AI provider is temporarily overloaded"
+              : `The AI provider responded ${response.status}`,
           response.status,
+          retryAfterMs(response.headers.get("retry-after"), detail),
         );
       }
 

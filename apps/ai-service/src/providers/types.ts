@@ -15,12 +15,16 @@ export interface AIProvider {
 
 /** Thrown by providers for upstream failures; the message is safe to show a user. */
 export class ProviderError extends Error {
+  /** The provider's HTTP status; 0 when it couldn't be reached at all; null otherwise. */
   readonly status: number | null;
+  /** How long the provider asked callers to wait before retrying (429, 503), if it said. */
+  readonly retryAfterMs: number | null;
 
-  constructor(message: string, status: number | null = null) {
+  constructor(message: string, status: number | null = null, retryAfterMs: number | null = null) {
     super(message);
     this.name = "ProviderError";
     this.status = status;
+    this.retryAfterMs = retryAfterMs;
   }
 }
 

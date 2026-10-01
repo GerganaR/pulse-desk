@@ -136,6 +136,20 @@ Changes made during Phase 6:
     no-op while the go-live heartbeat is in flight, so the test's gap check could silently
     not happen. Reproduced every time with 300 ms of inbound latency; the test now waits
     for the first round trip and keeps the latency.
+30. **A `.env` file for development and evaluation only.** `pnpm dev` and `pnpm eval` load
+    `apps/ai-service/.env` (Node's `--env-file-if-exists`, no dependency); `pnpm start`
+    and the E2E suite never do. A developer's real-model key can't leak into tests, and
+    tests can't spend it. `.env.example` is the tracked template.
+31. **`pnpm eval` is built for free tiers.** The first live run sent 59 requests four at a
+    time into a 5-requests-a-minute quota: 58 failed. Real providers are now asked one
+    case at a time; `--rpm N` paces requests; rate limits (429), overload (503) and
+    dropped connections are retried after the wait the provider asks for (Gemini puts it
+    in the error text, not a header). The report records answers cut at the output
+    limit, and `OPENAI_MAX_OUTPUT_TOKENS` raises that limit for models that reason
+    first.
+32. **The development CSP allows the asset server over HTTP, not only WebSocket.**
+    Source maps and hot-update manifests are fetched from it over HTTP, and each one was
+    blocked and logged. Production is unchanged (assets are same-origin there).
 
 ## Ports and processes (target for `pnpm dev`)
 
@@ -448,7 +462,7 @@ Removing a guard in the mock provider (so it invents a payment) makes CI fail.
 
 ### Outcome
 
-Delivered as planned, with the adjustments above (items 24–29). How the guard works:
+Delivered as planned, with the adjustments above (items 24–32). How the guard works:
 [ai-copilot.md](ai-copilot.md#grounding-answers-are-checked-not-trusted); what it can't
 catch: [LIMITATIONS.md](../apps/ai-service/src/evaluation/LIMITATIONS.md); the workflow:
 [ai-development-workflow.md](ai-development-workflow.md).
@@ -474,8 +488,17 @@ catch: [LIMITATIONS.md](../apps/ai-service/src/evaluation/LIMITATIONS.md); the w
 - **Browser check:** light, dark, 1440, 1024 and 390 px, no console errors or horizontal
   overflow. At 360 px the AI fault control would have overflowed with five options; it
   wraps now.
-- **Not done:** the OpenAI-compatible provider still hasn't run against a live API. It
-  needs a key, which is a human's call (cost, credentials); `pnpm eval` is ready for it.
+- **First live run (after the phase's main work, items 30–32):** the OpenAI-compatible
+  provider answered from a real API for the first time, through Google Gemini's
+  OpenAI-compatible endpoint on its free tier. The copilot works in the app with
+  `gemini-3.5-flash-lite`. In `pnpm eval`, 7 real answers (one for `hesitant-buyer`, six
+  for `checkout-declined`) all passed: 16 outcome claims, none unverified.
+- **Not done:** the full 59-case evaluation against a real model (about 12 minutes at
+  `--rpm 5`, on the developer's quota). The brief's own trap, a real model summarising
+  `hesitant-buyer`, hasn't been answered yet: those requests were lost to a network drop
+  before retries covered it. And `gemini-3.8-flash` returned one answer cut off at both
+  ends before becoming overloaded; the cause isn't known (its reasoning using up the
+  output limit is the leading guess).
 
 ---
 
@@ -582,16 +605,17 @@ a mid-range profile, and the results are recorded.
 
 ### Carried-over items
 
-| Item                                                                | From    | Planned in                           |
-| ------------------------------------------------------------------- | ------- | ------------------------------------ |
-| Client entry over the 350 KB budget (Zod is the main contributor)   | Phase 2 | Phase 7                              |
-| Dev metrics view in the reliability panel (panel exists now)        | Phase 4 | Phase 7                              |
-| Adaptive heartbeat thresholds (relative to normal RTT)              | Phase 4 | Phase 10                             |
-| Run the OpenAI-compatible provider against a live API (`pnpm eval`) | Phase 5 | Needs a key; tooling ready (Phase 6) |
-| ~~One-off `realtime-gateway` test failure under full parallel run~~ | Phase 5 | Fixed in Phase 6 (item 29)           |
-| AI metrics in the dev metrics view (`aiMetricsSink` exists)         | Phase 5 | Phase 7                              |
-| Delete generated mock session source                                | Phase 2 | Phase 3                              |
-| Commit Phases 1–2                                                   | Phase 2 | Before Phase 3                       |
+| Item                                                                               | From    | Planned in                  |
+| ---------------------------------------------------------------------------------- | ------- | --------------------------- |
+| Client entry over the 350 KB budget (Zod is the main contributor)                  | Phase 2 | Phase 7                     |
+| Dev metrics view in the reliability panel (panel exists now)                       | Phase 4 | Phase 7                     |
+| Adaptive heartbeat thresholds (relative to normal RTT)                             | Phase 4 | Phase 10                    |
+| Full 59-case `pnpm eval` against a real model (first live run: 7 answers, Phase 6) | Phase 5 | Needs the developer's quota |
+| `gemini-3.8-flash` answer cut off at both ends: find the cause                     | Phase 6 | Phase 8                     |
+| ~~One-off `realtime-gateway` test failure under full parallel run~~                | Phase 5 | Fixed in Phase 6 (item 29)  |
+| AI metrics in the dev metrics view (`aiMetricsSink` exists)                        | Phase 5 | Phase 7                     |
+| Delete generated mock session source                                               | Phase 2 | Phase 3                     |
+| Commit Phases 1–2                                                                  | Phase 2 | Before Phase 3              |
 
 ### Risks
 

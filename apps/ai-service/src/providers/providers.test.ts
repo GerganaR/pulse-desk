@@ -4,7 +4,7 @@ import { buildMessages } from "../prompts/system.ts";
 import { checkoutContext, makeRequest } from "../test/fixtures.ts";
 import { composeAnswer } from "./mock-answers.ts";
 import { createMockProvider, tokenize } from "./mock.provider.ts";
-import { createOpenAIProvider } from "./openai.provider.ts";
+import { createOpenAIProvider, retryAfterMs } from "./openai.provider.ts";
 import { ProviderError } from "./types.ts";
 
 async function collect(generator: AsyncGenerator<string, unknown>) {
@@ -196,6 +196,25 @@ describe("OpenAI-compatible provider", () => {
     );
     expect(error).toBeInstanceOf(ProviderError);
     expect((error as ProviderError).message).toBe("The AI provider is rate limiting requests");
+  });
+
+  it("reads how long a rate-limiting provider asks callers to wait", async () => {
+    // Gemini's OpenAI-compatible endpoint puts the wait in the error text, not a header.
+    const geminiBody =
+      '[{"error":{"code":429,"message":"Quota exceeded ... limit: 5\\nPlease retry in 18.995681632s."}}]';
+    const provider = createOpenAIProvider({
+      ...options,
+      fetch: () => Promise.resolve(new Response(geminiBody, { status: 429 })),
+    });
+    const error = await collect(provider.stream(makeRequest(), new AbortController().signal)).catch(
+      (e: unknown) => e,
+    );
+    expect(error).toMatchObject({ status: 429, retryAfterMs: 18_996 });
+    expect((error as ProviderError).message).not.toContain("Quota"); // details stay private
+
+    expect(retryAfterMs("7", "")).toBe(7_000);
+    expect(retryAfterMs(null, "try later")).toBeNull();
+    expect(retryAfterMs("Wed, 21 Oct 2026 07:28:00 GMT", "")).toBeNull();
   });
 
   it("rejects a malformed stream", async () => {
