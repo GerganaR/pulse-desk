@@ -45,6 +45,24 @@ describe("ConnectionIndicator", () => {
     expect(status).toHaveAttribute("aria-live", "polite");
   });
 
+  it.each([
+    ["live", "Live", false],
+    ["connecting", "Connecting", true],
+    ["syncing", "Catching up", true],
+    ["reconnecting", "Reconnecting", true],
+    ["degraded", "Degraded", false],
+    ["offline", "Offline", false],
+  ] as const)("%s reads '%s' and shows work in progress only while busy", (status, label, busy) => {
+    const { container } = render(<ConnectionIndicator status={status} />);
+    expect(screen.getByRole("status")).toHaveTextContent(new RegExp(`^${label}$`));
+    expect(container.firstElementChild).toHaveAttribute("data-status", status);
+    // A spinner while something is in progress, a steady dot otherwise. Both decorative.
+    const spinner = container.querySelector("svg");
+    expect(spinner !== null).toBe(busy);
+    for (const mark of container.querySelectorAll("svg, span.size-2"))
+      expect(mark.closest('[aria-hidden="true"]')).not.toBeNull();
+  });
+
   it("keeps ticking detail text out of the live region", () => {
     render(<ConnectionIndicator status="live" detail="42 ms" />);
     expect(screen.getByRole("status")).not.toHaveTextContent("42 ms");

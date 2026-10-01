@@ -90,10 +90,11 @@ export function MetricsView() {
                     <dt className="min-w-0 flex-1 truncate font-mono text-[11px] text-fg-muted">
                       {name.slice(prefix.length)}
                     </dt>
+                    {/* A group in a <dl> may hold only terms and descriptions, so the spread is one too. */}
                     {detail && (
-                      <span className="shrink-0 font-mono text-[11px] text-fg-subtle tabular-nums">
+                      <dd className="shrink-0 font-mono text-[11px] text-fg-subtle tabular-nums">
                         {detail}
-                      </span>
+                      </dd>
                     )}
                     <dd className="w-16 shrink-0 text-right font-mono text-xs text-fg tabular-nums">
                       {value}

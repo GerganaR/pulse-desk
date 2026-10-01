@@ -322,6 +322,11 @@ export function SessionTimeline({
       <div
         ref={attachScroll}
         data-testid="timeline-scroll"
+        // Focusable, so the keyboard can scroll it: the rows hold nothing to tab to.
+        // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- scrollable regions are the exception
+        tabIndex={0}
+        role="group"
+        aria-label="Activity timeline"
         onScroll={(event) => {
           const el = event.currentTarget;
           const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < STICK_WITHIN_PX;
@@ -329,7 +334,7 @@ export function SessionTimeline({
           setPinned(atBottom);
           if (!atBottom) setSeenSequence(lastSequence);
         }}
-        className="h-full overflow-y-auto"
+        className="h-full overflow-y-auto focus-visible:outline-offset-[-2px]"
       >
         <div className="relative px-4 pt-4">
           {earlierHidden && (

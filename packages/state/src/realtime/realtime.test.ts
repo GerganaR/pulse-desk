@@ -160,6 +160,128 @@ describe("timelines", () => {
     store.dispatch(snapshotReceived({ streamId: "stream-2", sequence: 1, sessions: [] }));
     expect(selectTimeline(store.getState(), "s1")).toBeUndefined();
   });
+
+  it("puts late and repeated live events in order, each once", async () => {
+    const store = setup({ events: [click(8), click(9)] });
+    await store.dispatch(fetchSessionDetail("s1"));
+    store.dispatch(eventsReceived([click(12), click(13)]));
+    store.dispatch(eventsReceived([click(11), click(12), click(10)])); // late, and one repeat
+
+    expect(selectTimeline(store.getState(), "s1")!.events.map((e) => e.sequence)).toEqual([
+      8, 9, 10, 11, 12, 13,
+    ]);
+  });
+
+  it("keeps the server's note that older history exists", async () => {
+    const store = setup({ events: [click(9)], truncated: true });
+    await store.dispatch(fetchSessionDetail("s1"));
+    expect(selectTimeline(store.getState(), "s1")).toMatchObject({
+      history: "ready",
+      truncated: true,
+    });
+  });
+
+  it("doesn't mix history from another stream epoch into the live timeline", async () => {
+    // The page asked a gateway that has restarted since this tab's stream began.
+    const store = setup({ streamId: "stream-0", events: [click(3), click(4)] });
+    await store.dispatch(fetchSessionDetail("s1"));
+    expect(selectTimeline(store.getState(), "s1")).toMatchObject({ history: "idle", events: [] });
+  });
+
+  describe("loading history", () => {
+    function setupWith(fetchSessionDetail: PulseApi["fetchSessionDetail"]) {
+      const calls = { count: 0 };
+      const store = createPulseStore({
+        extra: {
+          api: {
+            fetchSessionsSnapshot: () => new Promise(() => {}),
+            fetchSessionDetail: (...args) => {
+              calls.count++;
+              return fetchSessionDetail(...args);
+            },
+          },
+        },
+      });
+      return { store, calls };
+    }
+    const detailOf = (sessionId: string): SessionDetailSnapshot => ({
+      streamId: "stream-1",
+      sequence: 10,
+      session: makeSession({ id: sessionId }),
+      events: [click(9, sessionId)],
+      truncated: false,
+      viewers: [],
+    });
+
+    it("asks once: not again while loading, and not again once loaded", async () => {
+      const { store, calls } = setupWith(async (id) => detailOf(id));
+      const first = store.dispatch(fetchSessionDetail("s1"));
+      void store.dispatch(fetchSessionDetail("s1"));
+      expect(selectTimeline(store.getState(), "s1")?.history).toBe("loading");
+      await first;
+      await store.dispatch(fetchSessionDetail("s1"));
+      expect(calls.count).toBe(1);
+    });
+
+    it("keeps a readable error, and a retry clears it and loads", async () => {
+      let healthy = false;
+      const { store, calls } = setupWith(async (id) => {
+        if (!healthy) throw new Error("Couldn't load session activity (HTTP 503)");
+        return detailOf(id);
+      });
+      await store.dispatch(fetchSessionDetail("s1"));
+      expect(selectTimeline(store.getState(), "s1")).toMatchObject({
+        history: "error",
+        error: "Couldn't load session activity (HTTP 503)",
+        events: [],
+      });
+
+      healthy = true;
+      await store.dispatch(fetchSessionDetail("s1"));
+      expect(calls.count).toBe(2);
+      expect(selectTimeline(store.getState(), "s1")).toMatchObject({
+        history: "ready",
+        error: null,
+      });
+    });
+
+    it("keeps live events that arrived for a session whose history failed to load", async () => {
+      const { store } = setupWith(async () => {
+        throw new Error("down");
+      });
+      const request = store.dispatch(fetchSessionDetail("s1"));
+      store.dispatch(eventsReceived([click(11)]));
+      await request;
+      expect(selectTimeline(store.getState(), "s1")).toMatchObject({ history: "error" });
+      expect(selectTimeline(store.getState(), "s1")!.events.map((e) => e.sequence)).toEqual([11]);
+    });
+
+    it("treats a cancelled load as not started, so the next visit loads again", async () => {
+      const { store, calls } = setupWith(
+        (id, signal) =>
+          new Promise((resolve, reject) => {
+            if (calls.count > 1) return resolve(detailOf(id));
+            signal?.addEventListener("abort", () => reject(new Error("aborted")));
+          }),
+      );
+      const request = store.dispatch(fetchSessionDetail("s1"));
+      request.abort();
+      await request;
+      expect(selectTimeline(store.getState(), "s1")).toMatchObject({
+        history: "idle",
+        error: null,
+      });
+
+      await store.dispatch(fetchSessionDetail("s1"));
+      expect(selectTimeline(store.getState(), "s1")?.history).toBe("ready");
+    });
+
+    it("falls back to a generic message when the failure isn't an Error", async () => {
+      const { store } = setupWith(() => Promise.reject("nope"));
+      await store.dispatch(fetchSessionDetail("s1"));
+      expect(selectTimeline(store.getState(), "s1")?.error).toBe("Failed to load activity");
+    });
+  });
 });
 
 describe("presence", () => {

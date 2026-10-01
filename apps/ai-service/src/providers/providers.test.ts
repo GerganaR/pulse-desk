@@ -226,4 +226,80 @@ describe("OpenAI-compatible provider", () => {
       collect(provider.stream(makeRequest(), new AbortController().signal)),
     ).rejects.toThrow("malformed stream");
   });
+
+  // The stream below is what Gemini's OpenAI-compatible endpoint really sends (captured
+  // from gemini-3.5-flash-lite, ids shortened): the role repeated on every chunk, usage
+  // on every chunk, and a last chunk that carries a thought signature and no content.
+  // A Phase 6 answer from another Gemini model arrived cut at both ends; whatever caused
+  // that, it isn't this provider dropping part of a well-formed stream.
+  const geminiChunk = (delta: object, extra: object = {}) =>
+    `data: ${JSON.stringify({
+      choices: [{ delta: { ...delta, role: "assistant" }, index: 0, ...extra }],
+      created: 1790865689,
+      id: "GXG",
+      model: "gemini-3.5-flash-lite",
+      object: "chat.completion.chunk",
+      usage: { completion_tokens: 2, prompt_tokens: 424, total_tokens: 426 },
+    })}\n\n`;
+  const geminiStream = [
+    geminiChunk({ content: "The visitor" }),
+    geminiChunk({ content: " viewed the pricing page — twice — and" }),
+    geminiChunk({ content: ' clicked the "Upgrade to Pro" call-to-action.' }),
+    geminiChunk(
+      { extra_content: { google: { thought_signature: "EmAKXgFpFH0=" } } },
+      { finish_reason: "stop" },
+    ),
+    "data: [DONE]\n\n",
+  ].join("");
+  const geminiAnswer =
+    'The visitor viewed the pricing page — twice — and clicked the "Upgrade to Pro" call-to-action.';
+
+  it.each([1, 2, 3, 7, 64, 4_096])(
+    "keeps every character of a real provider stream read %i bytes at a time",
+    async (size) => {
+      // Small reads split lines, JSON and multi-byte characters at every possible point.
+      const bytes = new TextEncoder().encode(geminiStream);
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          for (let at = 0; at < bytes.length; at += size)
+            controller.enqueue(bytes.slice(at, at + size));
+          controller.close();
+        },
+      });
+      const provider = createOpenAIProvider({
+        ...options,
+        fetch: () => Promise.resolve(new Response(body, { status: 200 })),
+      });
+      const generator = provider.stream(makeRequest(), new AbortController().signal);
+      let answer = "";
+      let result = await generator.next();
+      while (!result.done) {
+        answer += result.value;
+        result = await generator.next();
+      }
+      expect(answer).toBe(geminiAnswer);
+      expect(result.value).toBe("stop");
+    },
+  );
+
+  it("reports an answer that stopped at the output limit, even when no text came with it", async () => {
+    const provider = createOpenAIProvider({
+      ...options,
+      fetch: () =>
+        Promise.resolve(
+          new Response(
+            sseBody([
+              geminiChunk({ content: "The visitor landed on" }),
+              geminiChunk({}, { finish_reason: "length" }),
+              "data: [DONE]\n\n",
+            ]),
+            { status: 200 },
+          ),
+        ),
+    });
+    const generator = provider.stream(makeRequest(), new AbortController().signal);
+    let result = await generator.next();
+    while (!result.done) result = await generator.next();
+    expect(result.value).toBe("length");
+  });
 });

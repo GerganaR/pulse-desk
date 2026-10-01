@@ -1,7 +1,6 @@
 import type { APIRequestContext, Locator, Page } from "@playwright/test";
-import { gatewayHttp } from "./env.ts";
 import { expect, test } from "./fixtures.ts";
-import { ingestPageViews } from "./gateway.ts";
+import { createSession, ingestPageViews } from "./gateway.ts";
 
 /**
  * A long timeline is virtualised: only the rows near the viewport exist in the DOM. These
@@ -14,45 +13,7 @@ const HISTORY = 250;
 const indicator = (page: Page) => page.locator("[data-status]:visible");
 
 async function createLongSession(request: APIRequestContext) {
-  const id = `ses_e2e_long_${process.pid}_${Date.now().toString(36)}`;
-  const now = Date.now();
-  const response = await request.post(`${gatewayHttp}/ingest`, {
-    data: {
-      events: [
-        {
-          type: "session.created",
-          eventId: `${id}_created`,
-          sessionId: id,
-          timestamp: now,
-          payload: {
-            session: {
-              id,
-              visitor: {
-                id: `vis_${id}`,
-                label: "Visitor #4242",
-                name: null,
-                country: "BG",
-                city: "Sofia",
-              },
-              device: "desktop",
-              browser: "Chrome",
-              os: "Linux",
-              referrer: null,
-              landingPath: "/pricing",
-              currentPath: "/pricing",
-              status: "active",
-              startedAt: now - 60_000,
-              lastActivityAt: now,
-              endedAt: null,
-              pageViews: 0,
-              eventCount: 0,
-            },
-          },
-        },
-      ],
-    },
-  });
-  expect(((await response.json()) as { accepted: number }).accepted).toBe(1);
+  const id = await createSession(request, "long");
   await ingestPageViews(request, id, HISTORY);
   return id;
 }

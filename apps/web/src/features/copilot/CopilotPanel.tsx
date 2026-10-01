@@ -82,7 +82,12 @@ export default function CopilotPanel({ sessionId }: { sessionId: string }) {
           const el = event.currentTarget;
           stickToBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 48;
         }}
-        className="min-h-0 flex-1 overflow-y-auto px-4 py-4"
+        // Focusable, so the keyboard can scroll it: finished answers hold nothing to tab to.
+        // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- scrollable regions are the exception
+        tabIndex={0}
+        role="group"
+        aria-label="Conversation"
+        className="min-h-0 flex-1 overflow-y-auto px-4 py-4 focus-visible:outline-offset-[-2px]"
       >
         {conversation.length === 0 ? (
           <EmptyConversation />

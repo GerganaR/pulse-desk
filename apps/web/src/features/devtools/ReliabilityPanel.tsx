@@ -350,14 +350,20 @@ function FaultLog({ faults }: { faults: FaultInjector }) {
       {log.length === 0 ? (
         <p className="text-xs text-fg-subtle">Nothing injected yet.</p>
       ) : (
-        <ol role="log" className="space-y-1">
-          {log.slice(0, 8).map((entry) => (
-            <li key={entry.id} className="flex gap-3 font-mono text-xs">
-              <span className="w-14 shrink-0 text-fg-subtle">{formatRelative(now - entry.at)}</span>
-              <span className="text-fg">{entry.message}</span>
-            </li>
-          ))}
-        </ol>
+        // The log role goes on a wrapper: on the list itself it would replace the list role
+        // and leave the items without a list.
+        <div role="log" aria-labelledby="devtools-log">
+          <ol className="space-y-1">
+            {log.slice(0, 8).map((entry) => (
+              <li key={entry.id} className="flex gap-3 font-mono text-xs">
+                <span className="w-14 shrink-0 text-fg-subtle">
+                  {formatRelative(now - entry.at)}
+                </span>
+                <span className="text-fg">{entry.message}</span>
+              </li>
+            ))}
+          </ol>
+        </div>
       )}
     </section>
   );

@@ -27,15 +27,16 @@ pnpm install
 pnpm dev           # web, realtime gateway, event simulator, ai-service → http://localhost:3000
 ```
 
-| Command               | What it does                                                                                                      |
-| --------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `pnpm dev`            | SSR server on `:3000`, client assets + HMR on `:3001`                                                             |
-| `pnpm build`          | Production client + server bundles (Rspack)                                                                       |
-| `pnpm build:devtools` | Same, with the reliability panel compiled in (`dist-devtools/`, used by E2E)                                      |
-| `pnpm start`          | Build (if needed) and run the production server                                                                   |
-| `pnpm check`          | Lint, typecheck and unit/component tests for every package                                                        |
-| `pnpm e2e`            | Playwright against the production build (`pnpm build && pnpm build:devtools` first)                               |
-| `pnpm eval`           | Grounding evaluation against a real model if `OPENAI_*` is set, else the mock. `--rpm 5` paces it for a free tier |
+| Command               | What it does                                                                                                                                                                              |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm dev`            | SSR server on `:3000`, client assets + HMR on `:3001`                                                                                                                                     |
+| `pnpm build`          | Production client + server bundles (Rspack)                                                                                                                                               |
+| `pnpm build:devtools` | Same, with the reliability panel compiled in (`dist-devtools/`, used by E2E)                                                                                                              |
+| `pnpm start`          | Build (if needed) and run the production server                                                                                                                                           |
+| `pnpm check`          | Lint, typecheck and unit/component tests for every package                                                                                                                                |
+| `pnpm coverage`       | The same tests with a coverage report per package (`coverage/` in each)                                                                                                                   |
+| `pnpm e2e`            | Playwright against the production build (`pnpm build && pnpm build:devtools` first): user flows, reliability under injected faults, and an axe accessibility scan of every page and state |
+| `pnpm eval`           | Grounding evaluation against a real model if `OPENAI_*` is set, else the mock. `--rpm 5` paces it for a free tier                                                                         |
 
 If port 3000 is taken: `PORT=3100 pnpm dev`.
 
@@ -67,7 +68,7 @@ packages/
   typescript-config/   Shared strict tsconfig presets
   eslint-config/       Shared flat ESLint config (type-aware, react-hooks, jsx-a11y)
 tests/
-  e2e/                 Playwright
+  e2e/                 Playwright: user flows, fault injection, accessibility scan (axe)
 docs/adr/              Architecture decision records
 prompts/               Prompts for AI-assisted planning, implementation, tests, review, refactoring
 ```

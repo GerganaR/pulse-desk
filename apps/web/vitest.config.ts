@@ -11,5 +11,9 @@ export default defineConfig({
     environment: "jsdom",
     setupFiles: ["./vitest.setup.ts"],
     include: ["src/**/*.test.{ts,tsx}", "server/**/*.test.{ts,tsx}"],
+    // Whole pages rendered in jsdom are CPU-bound (the sessions page takes about 0.6 s
+    // alone), and `pnpm check` runs every package's tests at once. Under that load the
+    // default 5 s was reached once in the Phase 8 flake audit; the limit isn't the assertion.
+    testTimeout: 20_000,
   },
 });

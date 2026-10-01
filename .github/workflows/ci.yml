@@ -63,7 +63,10 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       # Production build for the app specs, plus the devtools build the reliability spec
-      # drives through its fault-injection panel.
+      # drives through its fault-injection panel. Playwright then starts the whole stack
+      # itself (tests/playwright.config.ts): gateway, simulator with a fixed seed,
+      # ai-service with the mock provider, and three web servers (production, devtools,
+      # and production with the gateway unreachable for the error and outage states).
       - run: pnpm build && pnpm build:devtools
 
       - name: Install Playwright browser
@@ -76,5 +79,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report
-          path: tests/playwright-report
+          # The HTML report, and the trace of each test that failed and was retried.
+          path: |
+            tests/playwright-report
+            tests/test-results
           retention-days: 7

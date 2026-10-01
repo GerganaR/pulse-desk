@@ -4,10 +4,13 @@ import {
   AI_SERVICE_PORT,
   DEVTOOLS_WEB_PORT,
   GATEWAY_PORT,
+  OUTAGE_WEB_PORT,
+  UNREACHABLE_GATEWAY_PORT,
   WEB_PORT,
   aiServiceHttp,
   devtoolsWebUrl,
   gatewayHttp,
+  outageWebUrl,
   webUrl as baseURL,
 } from "./e2e/env.ts";
 
@@ -20,6 +23,10 @@ import {
  * A second web server runs the devtools build (`pnpm build:devtools`): identical except
  * that the reliability panel is compiled in. Only the reliability spec uses it, so every
  * other test still exercises the exact artefact that ships.
+ *
+ * A third serves the production build with the gateway unreachable, which is how a page
+ * gets into its error and outage states without any test-only code in the app. Only the
+ * accessibility spec uses it.
  * Ports differ from `pnpm dev` defaults so a running dev stack doesn't interfere.
  */
 export default defineConfig({
@@ -92,6 +99,19 @@ export default defineConfig({
         PORT: String(DEVTOOLS_WEB_PORT),
         GATEWAY_HTTP_URL: gatewayHttp,
         PUBLIC_GATEWAY_URL: `ws://localhost:${GATEWAY_PORT}/ws`,
+        AI_SERVICE_URL: aiServiceHttp,
+      },
+      reuseExistingServer: !process.env.CI,
+      timeout: 60_000,
+    },
+    {
+      name: "web-outage",
+      command: "pnpm --filter @pulsedesk/web start",
+      url: `${outageWebUrl}/healthz`,
+      env: {
+        PORT: String(OUTAGE_WEB_PORT),
+        GATEWAY_HTTP_URL: `http://localhost:${UNREACHABLE_GATEWAY_PORT}`,
+        PUBLIC_GATEWAY_URL: `ws://localhost:${UNREACHABLE_GATEWAY_PORT}/ws`,
         AI_SERVICE_URL: aiServiceHttp,
       },
       reuseExistingServer: !process.env.CI,

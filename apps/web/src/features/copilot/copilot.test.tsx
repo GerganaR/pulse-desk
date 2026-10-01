@@ -5,10 +5,12 @@ import {
   createPulseStore,
   type AIRequest,
 } from "@pulsedesk/state";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Provider } from "react-redux";
+import { renderToString } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { Copilot } from "./Copilot";
 import CopilotPanel from "./CopilotPanel";
 import { CopilotTurn } from "./CopilotTurn";
 
@@ -90,6 +92,17 @@ describe("CopilotTurn states", () => {
     expect(onRetry).toHaveBeenCalledWith("req_1");
   });
 
+  it("failed before any text arrived: explains, without mentioning a partial answer", () => {
+    const { item } = renderTurn({
+      status: "failed",
+      error: { code: "unavailable", message: "The AI service failed.", retryable: true },
+    });
+    expect(item.querySelector("[data-answer]")).toBeEmptyDOMElement();
+    expect(item).toHaveTextContent("The AI service failed.");
+    expect(item).not.toHaveTextContent("partial answer");
+    expect(item.querySelector("[data-answer]")).not.toHaveAttribute("aria-busy");
+  });
+
   it("failed without a retryable error: no Retry", () => {
     const { item } = renderTurn({
       status: "failed",
@@ -102,6 +115,33 @@ describe("CopilotTurn states", () => {
     const { item } = renderTurn({ status: "cancelled", text: "Some" });
     expect(item).toHaveTextContent("Cancelled. The partial answer is kept above.");
     expect(within(item).getByRole("button", { name: "Retry" })).toBeInTheDocument();
+  });
+
+  it("cancelled before any text arrived: just says so", () => {
+    const { item } = renderTurn({ status: "cancelled" });
+    expect(item).toHaveTextContent("Cancelled.");
+    expect(item).not.toHaveTextContent("partial answer");
+  });
+
+  it("done but cut short by the output limit: says the answer is incomplete", () => {
+    const { item } = renderTurn({
+      status: "done",
+      text: "The visitor opened pricing and then",
+      finishedAt: 1_900,
+      model: "mock",
+      finishReason: "length",
+    });
+    expect(within(item).getByText(/mock · 900 ms/)).toHaveTextContent(
+      "stopped at the length limit",
+    );
+  });
+
+  it("a typed question is shown as asked; a quick action as its full question", () => {
+    const typed = renderTurn({ action: "ask", prompt: "Why did checkout fail?" });
+    expect(within(typed.item).getByText("Why did checkout fail?")).toBeInTheDocument();
+    cleanup();
+    const quick = renderTurn({ action: "suggest_reply" });
+    expect(within(quick.item).getByText("Suggest a reply to the visitor")).toBeInTheDocument();
   });
 
   it("done with unverified claims: keeps the answer and flags each claim with its reason", () => {
@@ -295,5 +335,140 @@ describe("CopilotPanel", () => {
     );
     expect(screen.getByRole("list", { name: "Copilot conversation" })).toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent("Answer failed: The AI service failed.");
+  });
+
+  it("Shift+Enter adds a line instead of sending", async () => {
+    const user = userEvent.setup();
+    const server = streamingFetch();
+    vi.stubGlobal("fetch", server.fetch);
+    render(
+      <Provider store={makeStore()}>
+        <CopilotPanel sessionId="ses_1" />
+      </Provider>,
+    );
+    const input = screen.getByRole("textbox", { name: "Ask about this session" });
+    await user.type(input, "First line{Shift>}{Enter}{/Shift}second line");
+    expect(server.fetch).not.toHaveBeenCalled();
+    expect(input).toHaveValue("First line\nsecond line");
+  });
+
+  it("Cancel stops the request, keeps what arrived and announces it", async () => {
+    const user = userEvent.setup();
+    const server = streamingFetch();
+    vi.stubGlobal("fetch", server.fetch);
+    render(
+      <Provider store={makeStore()}>
+        <CopilotPanel sessionId="ses_1" />
+      </Provider>,
+    );
+    await user.click(screen.getByRole("button", { name: "Key events" }));
+    const turn = await screen.findByRole("listitem");
+    server.push(JSON.stringify({ type: "delta", text: "1. Landed on /pricing" }));
+    await waitFor(() => expect(turn.querySelector("[data-answer]")).toHaveTextContent("Landed"));
+    expect(screen.getByRole("status")).toBeEmptyDOMElement(); // streaming isn't announced
+
+    await user.click(within(turn).getByRole("button", { name: "Cancel" }));
+    expect(turn).toHaveAttribute("data-ai-status", "cancelled");
+    expect(turn.querySelector("[data-answer]")).toHaveTextContent("1. Landed on /pricing");
+    expect(server.fetch.mock.calls[0]![1].signal?.aborted).toBe(true);
+    expect(screen.getByRole("status")).toHaveTextContent("Answer cancelled.");
+    expect(within(turn).queryByRole("button", { name: "Cancel" })).not.toBeInTheDocument();
+  });
+
+  it("Retry asks the same question again and replaces the failed attempt", async () => {
+    const user = userEvent.setup();
+    const server = streamingFetch();
+    const failing = vi.fn(() =>
+      Promise.resolve(
+        Response.json(
+          { error: { code: "unavailable", message: "The AI service failed.", retryable: true } },
+          { status: 502 },
+        ),
+      ),
+    );
+    vi.stubGlobal("fetch", failing);
+    render(
+      <Provider store={makeStore()}>
+        <CopilotPanel sessionId="ses_1" />
+      </Provider>,
+    );
+    await user.click(screen.getByRole("button", { name: "What's blocking?" }));
+    const failed = await screen.findByRole("listitem");
+    await waitFor(() => expect(failed).toHaveAttribute("data-ai-status", "failed"));
+    expect(failed).toHaveTextContent("The AI service failed.");
+
+    vi.stubGlobal("fetch", server.fetch);
+    await user.click(within(failed).getByRole("button", { name: "Retry" }));
+    expect(JSON.parse(String(server.fetch.mock.calls[0]![1].body))).toMatchObject({
+      sessionId: "ses_1",
+      action: "blockers",
+    });
+    server.push(JSON.stringify({ type: "delta", text: "Nothing is blocking." }));
+    server.push(JSON.stringify({ type: "done", finishReason: "stop", model: "mock" }));
+    server.end();
+
+    await waitFor(() =>
+      expect(screen.getByRole("listitem")).toHaveAttribute("data-ai-status", "done"),
+    );
+    expect(screen.getAllByRole("listitem")).toHaveLength(1); // one turn, not two
+    expect(screen.getByRole("listitem")).toHaveTextContent("attempt 2");
+    expect(screen.getByRole("status")).toHaveTextContent("Answer ready.");
+  });
+
+  it("several unverified claims are announced as a count", async () => {
+    const user = userEvent.setup();
+    const server = streamingFetch();
+    vi.stubGlobal("fetch", server.fetch);
+    render(
+      <Provider store={makeStore()}>
+        <CopilotPanel sessionId="ses_1" />
+      </Provider>,
+    );
+    await user.click(screen.getByRole("button", { name: "Summarise" }));
+    await screen.findByText("Summarise this session");
+    server.push(JSON.stringify({ type: "delta", text: "They paid and signed up." }));
+    server.push(
+      JSON.stringify({
+        type: "done",
+        finishReason: "stop",
+        model: "mock",
+        unverified: [
+          { kind: "purchase", quote: "They paid", reason: "no payment form was submitted" },
+          { kind: "signup", quote: "signed up", reason: "no signup form was submitted" },
+        ],
+      }),
+    );
+    server.end();
+    await waitFor(() =>
+      expect(screen.getByRole("status")).toHaveTextContent(
+        "Answer ready. 2 claims couldn't be verified against the session.",
+      ),
+    );
+  });
+});
+
+describe("Copilot (the session page's column)", () => {
+  it("server-renders a placeholder only: no controls that can't work yet", () => {
+    const html = renderToString(
+      <Provider store={makeStore()}>
+        <Copilot sessionId="ses_1" />
+      </Provider>,
+    );
+    const page = document.createElement("div");
+    page.innerHTML = html;
+    expect(within(page).getByRole("heading", { name: "Copilot" })).toHaveTextContent("Copilot");
+    expect(within(page).queryByRole("button")).toBeNull();
+    expect(within(page).queryByRole("textbox")).toBeNull();
+  });
+
+  it("loads the conversation and composer in the browser", async () => {
+    render(
+      <Provider store={makeStore()}>
+        <Copilot sessionId="ses_1" />
+      </Provider>,
+    );
+    const region = screen.getByRole("region", { name: "Copilot" });
+    expect(await within(region).findByRole("group", { name: "Quick actions" })).toBeInTheDocument();
+    expect(within(region).getByRole("textbox", { name: "Ask about this session" })).toBeEnabled();
   });
 });

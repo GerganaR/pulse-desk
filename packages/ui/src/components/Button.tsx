@@ -7,7 +7,8 @@ const variants = {
   secondary:
     "bg-surface text-fg border border-line hover:bg-surface-hover hover:border-line-strong shadow-card",
   ghost: "text-fg-muted hover:bg-surface-hover hover:text-fg",
-  danger: "bg-danger text-fg-inverse hover:opacity-90 shadow-sm",
+  // A solid hover colour: fading the button would take its label below 4.5:1.
+  danger: "bg-danger text-fg-inverse hover:bg-danger-hover shadow-sm",
 } as const;
 
 const sizes = {
