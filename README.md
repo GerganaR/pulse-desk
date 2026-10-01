@@ -5,14 +5,16 @@ explore resilient realtime frontend architecture. It combines WebSocket-driven s
 updates, streamed AI responses, Node.js streaming SSR, Redux Toolkit state management, and
 a pnpm/Turborepo monorepo built with Rspack.
 
-> **Status:** under active, incremental development. Phases 1–5 are complete: monorepo,
+> **Status:** under active, incremental development. Phases 1–6 are complete: monorepo,
 > shared contracts, design system, custom streaming SSR with Rspack, Redux domain layer,
 > dashboard and session views, the realtime stack (WebSocket gateway, event simulator,
 > realtime client), realtime reliability (heartbeat, gap detection and resync, dedupe,
 > reorder buffer, backpressure, a dev fault-injection panel), and the AI copilot (an AI
 > service with a mock and an OpenAI-compatible provider, NDJSON streaming with cancel,
-> retry and timeouts, a lazy-loaded copilot panel). This README is expanded as each
-> phase lands.
+> retry and timeouts, a lazy-loaded copilot panel), and AI quality (a grounding checker
+> that flags unsupported claims in every answer, hallucination regressions in CI, and the
+> AI-assisted workflow this project is built with). This README is expanded as each phase
+> lands.
 
 ## Running locally
 
@@ -33,6 +35,7 @@ pnpm dev           # web, realtime gateway, event simulator, ai-service → http
 | `pnpm start`          | Build (if needed) and run the production server                                     |
 | `pnpm check`          | Lint, typecheck and unit/component tests for every package                          |
 | `pnpm e2e`            | Playwright against the production build (`pnpm build && pnpm build:devtools` first) |
+| `pnpm eval`           | Grounding evaluation against a real model if `OPENAI_*` is set, else the mock       |
 
 If port 3000 is taken: `PORT=3100 pnpm dev`.
 
@@ -45,7 +48,8 @@ apps/
     server/            HTTP server, SSR pipeline, CSP, asset manifest, gateway client
     src/               app shell, pages, features (sessions, dashboard, realtime, copilot)
   realtime-gateway/    Node WebSocket gateway: sequencing, replay buffer, snapshots, presence
-  ai-service/          AI copilot backend: provider abstraction (mock, OpenAI-compatible), NDJSON streaming
+  ai-service/          AI copilot backend: providers (mock, OpenAI-compatible), NDJSON streaming,
+                       grounding checker and evaluation (src/evaluation/)
   event-simulator/     Believable visitor traffic, posted to the gateway's ingest API
 packages/
   contracts/           Zod schemas + inferred types: realtime events, WS protocol, DTOs
@@ -59,6 +63,7 @@ packages/
 tests/
   e2e/                 Playwright
 docs/adr/              Architecture decision records
+prompts/               Prompts for AI-assisted planning, implementation, tests, review, refactoring
 ```
 
 Internal packages and the Node services ship **TypeScript source** with no build step:
@@ -98,10 +103,27 @@ unaffected throughout.
   aborts the provider end to end. Time limits apply to the first token and the whole answer.
 - The default provider is a deterministic mock grounded in the session data;
   `AI_PROVIDER=openai` switches to a real model.
-- In dev, the Reliability panel can make the copilot time out, fail with a 500 or stream
-  slowly.
+- **Answers are checked, not trusted.** ai-service checks every complete answer against
+  the context the model saw: claims of a purchase, signup, contact request, form
+  submission or error must match an event. Anything unsupported is flagged under the
+  answer ("Couldn't verify against this session's events: …", with the reason). A click
+  on "Upgrade" is not a payment.
+- A regression suite runs nine realistic sessions through every quick action in CI, and
+  fails if any answer makes an unsupported claim. `pnpm eval` runs the same cases against
+  a real model and writes a report. What rule-based checking can't catch:
+  [LIMITATIONS.md](apps/ai-service/src/evaluation/LIMITATIONS.md).
+- In dev, the Reliability panel can make the copilot time out, fail with a 500, stream
+  slowly, or invent a claim (to see the guard catch it).
 
 Details: [docs/ai-copilot.md](docs/ai-copilot.md).
+
+## AI-assisted development
+
+This project is built with an AI coding assistant, under a loop where AI output is
+checked like any other: plan → human review → implementation in small verified steps →
+mutation-checked tests → AI review → human review and commit. The workflow, with real
+examples from this repository's history: [docs/ai-development-workflow.md](docs/ai-development-workflow.md).
+The prompts for each step: [prompts/](prompts/README.md).
 
 ## Architecture decisions
 
@@ -139,17 +161,17 @@ Each service reads its own variables; `pnpm dev` passes them through Turborepo.
 
 **ai-service**
 
-| Variable                    | Default                     | Purpose                                                            |
-| --------------------------- | --------------------------- | ------------------------------------------------------------------ |
-| `AI_SERVICE_PORT`           | `4100`                      | HTTP port                                                          |
-| `AI_PROVIDER`               | `mock`                      | `mock` or `openai` (any OpenAI-compatible endpoint)                |
-| `OPENAI_API_KEY`            | —                           | Required with `AI_PROVIDER=openai`; never reaches the browser      |
-| `OPENAI_MODEL`              | —                           | Required with `AI_PROVIDER=openai`                                 |
-| `OPENAI_BASE_URL`           | `https://api.openai.com/v1` | Chat Completions endpoint                                          |
-| `AI_FIRST_TOKEN_TIMEOUT_MS` | `10000`                     | No first token by then → `timeout` error in the stream             |
-| `AI_TOTAL_TIMEOUT_MS`       | `45000`                     | Hard limit for one answer                                          |
-| `AI_MOCK_TOKEN_MS`          | `35`                        | Mock provider pacing per token                                     |
-| `AI_DEBUG`                  | off (`1` in `pnpm dev`)     | Dev fault injection and `/debug/requests/:id`. Never in production |
+| Variable                    | Default                     | Purpose                                                                                                  |
+| --------------------------- | --------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `AI_SERVICE_PORT`           | `4100`                      | HTTP port                                                                                                |
+| `AI_PROVIDER`               | `mock`                      | `mock` or `openai` (any OpenAI-compatible endpoint)                                                      |
+| `OPENAI_API_KEY`            | —                           | Required with `AI_PROVIDER=openai` (and for `pnpm eval` against a real model); never reaches the browser |
+| `OPENAI_MODEL`              | —                           | Required with `AI_PROVIDER=openai` and for `pnpm eval`                                                   |
+| `OPENAI_BASE_URL`           | `https://api.openai.com/v1` | Chat Completions endpoint                                                                                |
+| `AI_FIRST_TOKEN_TIMEOUT_MS` | `10000`                     | No first token by then → `timeout` error in the stream                                                   |
+| `AI_TOTAL_TIMEOUT_MS`       | `45000`                     | Hard limit for one answer                                                                                |
+| `AI_MOCK_TOKEN_MS`          | `35`                        | Mock provider pacing per token                                                                           |
+| `AI_DEBUG`                  | off (`1` in `pnpm dev`)     | Dev fault injection and `/debug/requests/:id`. Never in production                                       |
 
 **event-simulator**
 

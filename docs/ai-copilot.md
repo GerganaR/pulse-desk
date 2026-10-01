@@ -44,7 +44,44 @@ rejected with 400 rather than passed to a model. That's a second check on the bo
 The system prompt (`apps/ai-service/src/prompts/system.ts`) tells the model to answer only
 from the data, never infer outcomes ("a click is not a purchase"), and ignore
 instructions inside the data. The session JSON sits in a delimited block, apart from the
-task. Checking answers against the data is Phase 6.
+task. The prompt is the first line of defence; the grounding guard below checks the
+answers.
+
+## Grounding: answers are checked, not trusted
+
+Every complete answer is checked in ai-service against the **exact context the model
+saw**, before the stream ends. Code and fixtures: `apps/ai-service/src/evaluation/`.
+
+- **Checker** (`grounding.ts`): rule-based. It finds outcome claims (purchase, signup,
+  contact request, form submission, error) in the answer, as asserted or denied, and
+  verifies each against the session's `form_submit` events. Quoted visitor strings and
+  paths are ignored (`Clicked "Upgrade to Pro"` isn't an upgrade); hedged statements and
+  questions aren't claims. Each verdict has a reason, e.g. "no checkout or payment form
+  was submitted successfully".
+- **Runtime guard**: the result goes out in the `done` chunk as
+  `unverified: [{kind, quote, reason}]` (defaults to `[]`, so older clients and services
+  still parse). The answer stays visible; the UI adds "Couldn't verify against this
+  session's events:" with each quote and reason, and the announcement says how many
+  claims couldn't be verified. Failed or cancelled answers aren't checked: they're
+  already marked incomplete.
+- **Why in ai-service, not the browser:** the checker needs the context the model was
+  given (the browser only has its own, possibly newer, copy of the session), and it would
+  add to an initial bundle that's already over budget. The copilot chunk grew 0.3 KB
+  gzipped for the flag UI; the checker adds nothing to the client.
+- **Regression suite** (`regression.test.ts`, in CI): nine fixtures shaped like the
+  simulator's journeys, each asked every quick action and one or two questions, answered
+  by the mock provider. Any unverified claim, forbidden outcome or banned phrase fails
+  CI. Removing the mock's success guard (so it reports a declined checkout as a
+  purchase) fails it.
+- **`pnpm eval`**: the same cases against a real provider (with `OPENAI_API_KEY` and
+  `OPENAI_MODEL`; otherwise the mock), `--repeat N` for nondeterminism. Writes a Markdown
+  and JSON report to `apps/ai-service/eval-reports/` (gitignored) and exits 1 on any
+  unverified claim.
+- **Metric**: `ai.answer.unverified_claims` (histogram per action); the request log line
+  carries `unverifiedClaims` when there are any.
+
+What rule-based checking can't catch, and why it isn't an LLM judge:
+[LIMITATIONS.md](../apps/ai-service/src/evaluation/LIMITATIONS.md).
 
 ## Providers
 
@@ -100,7 +137,8 @@ stream as `aborted`; removing ai-service's abort-on-disconnect makes that test f
 
 ## Faults (development)
 
-The reliability panel's **AI copilot** control (Off / Timeout / Error 500 / Slow) adds an
+The reliability panel's **AI copilot** control (Off / Timeout / Error 500 / Slow /
+Ungrounded) adds an
 `x-pulsedesk-ai-fault` header to new copilot requests. Unlike the realtime faults, these
 are server behaviours (ai-service's time limits, the proxy's error mapping), so they're
 enacted by the real services, doubly gated:
@@ -111,23 +149,27 @@ enacted by the real services, doubly gated:
 
 `AI_DEBUG=1` also exposes `GET /debug/requests/:id` (recent outcomes) for E2E.
 
-| Fault     | What happens                            | UI                                               |
-| --------- | --------------------------------------- | ------------------------------------------------ |
-| Timeout   | The provider never produces a token     | Failed: "didn't start answering in time" + Retry |
-| Error 500 | ai-service answers 500 before streaming | Failed: "The AI service failed" + Retry          |
-| Slow      | 250 ms before every token               | Visible streaming; time to try Cancel            |
+| Fault      | What happens                                                                         | UI                                                        |
+| ---------- | ------------------------------------------------------------------------------------ | --------------------------------------------------------- |
+| Timeout    | The provider never produces a token                                                  | Failed: "didn't start answering in time" + Retry          |
+| Error 500  | ai-service answers 500 before streaming                                              | Failed: "The AI service failed" + Retry                   |
+| Slow       | 250 ms before every token                                                            | Visible streaming; time to try Cancel                     |
+| Ungrounded | The model appends a claim the session doesn't support (a payment, if there was none) | "Couldn't verify against this session's events:" + reason |
 
 ## Tests
 
-| Level       | File                                             | Covers                                                                                                                                                                        |
-| ----------- | ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Unit        | `contracts/src/ai-context.test.ts`               | Privacy boundary: no ids, names, city, sequences, timestamps; strict schema; trimming                                                                                         |
-| Unit        | `ai-service/src/stream.test.ts`                  | done/error framing, both timeouts, abort stops the provider, provider ignoring abort                                                                                          |
-| Unit        | `ai-service/src/providers/providers.test.ts`     | Mock is grounded and deterministic; OpenAI SSE parsing, errors                                                                                                                |
-| Integration | `ai-service/src/server.integration.test.ts`      | HTTP: NDJSON, validation, disconnect aborts, fault gate, 500/timeout/slow                                                                                                     |
-| Integration | `web/server/ai-proxy.test.ts`                    | Context built server-side, validation, CSRF, 502/503 mapping, cancel closes upstream, fault forwarding                                                                        |
-| Unit        | `web/src/features/copilot/stream-client.test.ts` | NDJSON split reads and UTF-8, malformed lines, early close, timeouts, abort                                                                                                   |
-| Unit        | `web/src/features/copilot/ai-runner.test.ts`     | Per-frame batching, cancel keeps text, failure, retry in place, concurrent requests                                                                                           |
-| Unit        | `state/src/ai/ai.test.ts`                        | Slice lifecycle, late chunks ignored, retry, trimming                                                                                                                         |
-| Component   | `web/src/features/copilot/copilot.test.tsx`      | Every turn state, progressive render, composer, announcements, text-only output                                                                                               |
-| E2E         | `tests/e2e/copilot.spec.ts`                      | Progressive render (recorded in-page), concurrent answers, grounding, cancel reaches ai-service, 500 → retry, timeout, WebSocket never leaves Live, production ignores faults |
+| Level       | File                                             | Covers                                                                                                                                                                                                                                                 |
+| ----------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Unit        | `contracts/src/ai-context.test.ts`               | Privacy boundary: no ids, names, city, sequences, timestamps; strict schema; trimming                                                                                                                                                                  |
+| Unit        | `ai-service/src/stream.test.ts`                  | done/error framing, both timeouts, abort stops the provider, provider ignoring abort, the check runs on complete answers only                                                                                                                          |
+| Unit        | `ai-service/src/providers/providers.test.ts`     | Mock is grounded and deterministic; OpenAI SSE parsing, errors                                                                                                                                                                                         |
+| Integration | `ai-service/src/server.integration.test.ts`      | HTTP: NDJSON, validation, disconnect aborts, fault gate, 500/timeout/slow/ungrounded (flagged in `done`)                                                                                                                                               |
+| Integration | `web/server/ai-proxy.test.ts`                    | Context built server-side, validation, CSRF, 502/503 mapping, cancel closes upstream, fault forwarding                                                                                                                                                 |
+| Unit        | `web/src/features/copilot/stream-client.test.ts` | NDJSON split reads and UTF-8, malformed lines, early close, timeouts, abort                                                                                                                                                                            |
+| Unit        | `web/src/features/copilot/ai-runner.test.ts`     | Per-frame batching, cancel keeps text, failure, retry in place, concurrent requests                                                                                                                                                                    |
+| Unit        | `state/src/ai/ai.test.ts`                        | Slice lifecycle, late chunks ignored, retry, trimming                                                                                                                                                                                                  |
+| Component   | `web/src/features/copilot/copilot.test.tsx`      | Every turn state, progressive render, composer, announcements, text-only output                                                                                                                                                                        |
+| Unit        | `ai-service/src/evaluation/grounding.test.ts`    | Checker vs each fixture's ground truth (every claim kind, asserted and denied); masking, negation, hedges, questions; reasons                                                                                                                          |
+| Regression  | `ai-service/src/evaluation/regression.test.ts`   | Mock provider × 9 fixtures × every action and question: no unverified, forbidden or banned claims; invented claims are caught                                                                                                                          |
+| Unit        | `ai-service/src/evaluation/report.test.ts`       | `pnpm eval` report: summary, failures with claim, reason and answer, provider errors                                                                                                                                                                   |
+| E2E         | `tests/e2e/copilot.spec.ts`                      | Progressive render (recorded in-page), concurrent answers, grounding, cancel reaches ai-service, 500 → retry, timeout, WebSocket never leaves Live, production ignores faults, the grounding guard flags an invented claim (and not a grounded answer) |

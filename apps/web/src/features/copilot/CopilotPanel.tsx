@@ -15,8 +15,11 @@ function announcementFor(conversation: readonly AIRequest[]): string {
     .sort((a, b) => (b.finishedAt ?? 0) - (a.finishedAt ?? 0))[0];
   if (!latest) return "";
   switch (latest.status) {
-    case "done":
-      return "Answer ready.";
+    case "done": {
+      const count = latest.unverified.length;
+      if (count === 0) return "Answer ready.";
+      return `Answer ready. ${count === 1 ? "1 claim" : `${count} claims`} couldn't be verified against the session.`;
+    }
     case "failed":
       return `Answer failed: ${latest.error?.message ?? ""}`;
     case "cancelled":

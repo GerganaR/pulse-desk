@@ -150,6 +150,34 @@ export const AIErrorSchema = z.object({
 });
 export type AIError = z.infer<typeof AIErrorSchema>;
 
+// ─── Grounding: claims checked against the session ──────────────────────────────
+
+/**
+ * Outcomes an answer can claim that the session's events can confirm or refute. ai-service
+ * checks every complete answer for these (see `evaluation/grounding.ts`).
+ */
+export const GROUNDING_CLAIM_KINDS = [
+  "purchase",
+  "signup",
+  "form_submission",
+  "error",
+  "contact_request",
+] as const;
+export const GroundingClaimKindSchema = z.enum(GROUNDING_CLAIM_KINDS);
+export type GroundingClaimKind = z.infer<typeof GroundingClaimKindSchema>;
+
+/** A claim in an answer that the session data doesn't back up. */
+export const UnverifiedClaimSchema = z.object({
+  kind: GroundingClaimKindSchema,
+  /** The words in the answer that make the claim (model output: render as text only). */
+  quote: z.string().max(300),
+  /** Why it couldn't be verified, e.g. "no checkout was submitted successfully". */
+  reason: z.string().max(300),
+});
+export type UnverifiedClaim = z.infer<typeof UnverifiedClaimSchema>;
+
+export const MAX_UNVERIFIED_CLAIMS = 10;
+
 export const AIChunkSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("delta"), text: z.string().min(1) }),
   z.object({
@@ -157,6 +185,8 @@ export const AIChunkSchema = z.discriminatedUnion("type", [
     finishReason: z.enum(["stop", "length"]),
     /** Which model answered, e.g. "mock" or the provider's model name. */
     model: z.string(),
+    /** Claims in the complete answer that the session data doesn't support. */
+    unverified: z.array(UnverifiedClaimSchema).max(MAX_UNVERIFIED_CLAIMS).default([]),
   }),
   z.object({ type: z.literal("error"), error: AIErrorSchema }),
 ]);
@@ -174,6 +204,6 @@ export const NDJSON_CONTENT_TYPE = "application/x-ndjson";
  * Faults the dev reliability panel can request for AI calls. Forwarded only by devtools
  * web builds, and honoured only by an ai-service started with AI_DEBUG=1.
  */
-export const AIFaultSchema = z.enum(["timeout", "http_500", "slow"]);
+export const AIFaultSchema = z.enum(["timeout", "http_500", "slow", "ungrounded"]);
 export type AIFault = z.infer<typeof AIFaultSchema>;
 export const AI_FAULT_HEADER = "x-pulsedesk-ai-fault";

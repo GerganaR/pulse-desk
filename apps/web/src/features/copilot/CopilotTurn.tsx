@@ -1,6 +1,6 @@
 import type { AIRequest } from "@pulsedesk/state";
 import { Button, cx } from "@pulsedesk/ui";
-import { RotateCw, Sparkles, Square, TriangleAlert } from "lucide-react";
+import { RotateCw, ShieldAlert, Sparkles, Square, TriangleAlert } from "lucide-react";
 import { memo } from "react";
 import { formatLatency } from "@/lib/format";
 import { questionFor } from "./quick-actions";
@@ -27,6 +27,31 @@ function Meta({ request }: { request: AIRequest }) {
         <span className="text-warning"> · stopped at the length limit</span>
       )}
     </p>
+  );
+}
+
+/**
+ * The runtime grounding guard's verdict: claims ai-service couldn't back with an event.
+ * The answer stays visible; the flag says which parts not to rely on, and why.
+ */
+function UnverifiedClaims({ claims }: { claims: AIRequest["unverified"] }) {
+  return (
+    <div
+      data-unverified-claims={claims.length}
+      className="mt-2 rounded-lg border border-warning/30 bg-warning-soft px-3 py-2 text-xs"
+    >
+      <p className="flex items-start gap-2 font-medium text-fg">
+        <ShieldAlert aria-hidden="true" className="mt-px size-3.5 shrink-0 text-warning" />
+        Couldn't verify against this session's events:
+      </p>
+      <ul className="mt-1.5 space-y-1 pl-5.5">
+        {claims.map((claim, index) => (
+          <li key={index} className="break-words text-fg-muted">
+            <q className="text-fg">{claim.quote}</q>: {claim.reason}.
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
@@ -90,6 +115,9 @@ export const CopilotTurn = memo(function CopilotTurn({
             </Button>
           )}
 
+          {status === "done" && request.unverified.length > 0 && (
+            <UnverifiedClaims claims={request.unverified} />
+          )}
           {status === "done" && <Meta request={request} />}
 
           {(status === "failed" || status === "cancelled") && (

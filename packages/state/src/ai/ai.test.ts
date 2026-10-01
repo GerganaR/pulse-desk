@@ -56,6 +56,23 @@ describe("ai slice", () => {
       model: "mock",
     });
     expect(selectAIAnswersGenerated(store.getState())).toBe(1);
+    expect(get()?.unverified).toEqual([]);
+  });
+
+  it("keeps the unverified claims reported with the finished answer", () => {
+    const { store, start, get } = setup();
+    start();
+    const claim = { kind: "purchase", quote: "They paid", reason: "no payment" } as const;
+    store.dispatch(
+      aiRequestCompleted({
+        id: "r1",
+        at: 2_000,
+        model: "mock",
+        finishReason: "stop",
+        unverified: [claim],
+      }),
+    );
+    expect(get()).toMatchObject({ status: "done", unverified: [claim] });
   });
 
   it("keeps the partial answer when the request fails or is cancelled", () => {

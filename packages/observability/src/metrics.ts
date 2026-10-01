@@ -25,6 +25,7 @@ export type MetricName =
   | "ai.request.first_token"
   | "ai.request.cancelled"
   | "ai.request.failed"
+  | "ai.answer.unverified_claims"
   | "session.timeline.render.duration";
 
 export type MetricKind = "counter" | "gauge" | "histogram";

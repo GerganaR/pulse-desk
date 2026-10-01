@@ -60,6 +60,15 @@ schemas) is a **lazy chunk of 14.2 KB minified / 5.7 KB gzipped**, loaded after 
 on the session page only. None of it is in the initial bundle, which was checked by
 searching the initial chunks for its strings.
 
+## Phase 6 delta
+
+Same method. **Initial JS unchanged**: 474.7 KB minified / 144.5 KB gzipped. The
+grounding checker runs in ai-service, not in the browser; the client only gained an
+`unverified` field in the `ai` slice.
+
+The lazy copilot chunk grew from 14.2 KB to **15.6 KB minified** (5.7 → **6.0 KB
+gzipped**): the "couldn't verify" flag and its announcement.
+
 ### Known opportunities (to be evaluated in Phase 7)
 
 1. **Zod on the client.** Full Zod is used only to validate network input. Zod 4's

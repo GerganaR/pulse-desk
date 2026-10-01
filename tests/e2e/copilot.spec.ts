@@ -14,10 +14,24 @@ import { expect, test } from "./fixtures.ts";
 
 const indicator = (page: Page) => page.locator("[data-status]:visible");
 
+/**
+ * Opens an active session that already has activity. A session the simulator created a
+ * moment ago has no events yet, and the copilot rightly says so, which isn't what these
+ * tests are about (it made "Key events, in order:" flaky under --repeat-each).
+ */
 async function openActiveSession(page: Page) {
-  await page.goto("/sessions?status=active");
-  const href = await page.getByRole("table").getByRole("link").first().getAttribute("href");
-  expect(href).toMatch(/^\/sessions\/ses_/);
+  let href: string | undefined;
+  await expect
+    .poll(async () => {
+      const response = await page.request.get(`${gatewayHttp}/sessions`);
+      const { sessions } = (await response.json()) as {
+        sessions: { id: string; status: string; pageViews: number }[];
+      };
+      const session = sessions.find((s) => s.status === "active" && s.pageViews >= 2);
+      href = session && `/sessions/${session.id}`;
+      return href;
+    })
+    .toMatch(/^\/sessions\/ses_/);
   await page.goto(href!);
   await expect(indicator(page)).toHaveAttribute("data-status", "live");
   await recordConnectionStatuses(page);
@@ -140,7 +154,10 @@ test.describe("AI copilot", () => {
 test.describe("AI copilot failures (devtools build)", () => {
   test.use({ baseURL: devtoolsWebUrl });
 
-  async function setAIFault(page: Page, fault: "Off" | "Timeout" | "Error 500" | "Slow") {
+  async function setAIFault(
+    page: Page,
+    fault: "Off" | "Timeout" | "Error 500" | "Slow" | "Ungrounded",
+  ) {
     await page.getByRole("button", { name: "Reliability" }).click();
     const panel = page.getByRole("dialog", { name: "Reliability panel" });
     await panel
@@ -205,6 +222,37 @@ test.describe("AI copilot failures (devtools build)", () => {
 
       await expectConnectionStayedLive(page);
     });
+  });
+
+  test("the grounding guard flags an invented claim, and not a grounded answer", async ({
+    page,
+  }) => {
+    const { copilot } = await openActiveSession(page);
+
+    // The mock's own answer about this live session passes the guard.
+    await quickAction(copilot, "Summarise").click();
+    const turns = copilot.locator("[data-request-id]"); // flagged claims are list items too
+    const grounded = turns.first();
+    await expect(grounded).toHaveAttribute("data-ai-status", "done", { timeout: 20_000 });
+    await expect(grounded.locator("[data-unverified-claims]")).toHaveCount(0);
+
+    // With the fault, the model appends a claim this session doesn't support.
+    await setAIFault(page, "Ungrounded");
+    await quickAction(copilot, "Summarise").click();
+    const invented = turns.nth(1);
+    await expect(invented).toHaveAttribute("data-ai-status", "done", { timeout: 20_000 });
+    const claim =
+      /The visitor (completed the payment for the Pro plan|also signed up for a free trial|also submitted the newsletter form successfully)/;
+    await expect(answerOf(invented)).toContainText(claim);
+    const flag = invented.locator("[data-unverified-claims]");
+    await expect(flag).toHaveAttribute("data-unverified-claims", "1");
+    await expect(flag).toContainText("Couldn't verify against this session's events:");
+    await expect(flag).toContainText(claim);
+    await expect(copilot.getByRole("status")).toHaveText(
+      "Answer ready. 1 claim couldn't be verified against the session.",
+    );
+
+    await expectConnectionStayedLive(page);
   });
 
   test("a model that never answers times out with an explanation", async ({ page }) => {

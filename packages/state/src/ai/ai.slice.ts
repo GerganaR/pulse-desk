@@ -1,4 +1,4 @@
-import type { AIAction, AIError } from "@pulsedesk/contracts";
+import type { AIAction, AIError, UnverifiedClaim } from "@pulsedesk/contracts";
 import {
   createEntityAdapter,
   createSelector,
@@ -27,6 +27,8 @@ export interface AIRequest {
   attempt: number;
   model: string | null;
   finishReason: "stop" | "length" | null;
+  /** Claims in the finished answer that ai-service couldn't verify against the session. */
+  unverified: UnverifiedClaim[];
 }
 
 export interface AIState {
@@ -87,6 +89,7 @@ export const aiSlice = createSlice({
         attempt: previous ? previous.attempt + 1 : 1,
         model: null,
         finishReason: null,
+        unverified: [],
       });
       const index = previous ? conversation.indexOf(previous.id) : -1;
       if (previous && index !== -1) {
@@ -119,6 +122,7 @@ export const aiSlice = createSlice({
         at: number;
         model: string;
         finishReason: "stop" | "length";
+        unverified?: UnverifiedClaim[];
       }>,
     ) {
       const request = streaming(state, action.payload.id);
@@ -127,6 +131,7 @@ export const aiSlice = createSlice({
       request.finishedAt = action.payload.at;
       request.model = action.payload.model;
       request.finishReason = action.payload.finishReason;
+      request.unverified = action.payload.unverified ?? [];
       state.completedCount++;
     },
     aiRequestFailed(state, action: PayloadAction<{ id: string; at: number; error: AIError }>) {

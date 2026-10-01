@@ -112,6 +112,7 @@ export function createAIRunner({
               at: now(),
               model: chunk.model,
               finishReason: chunk.finishReason,
+              unverified: chunk.unverified,
             }),
           );
           metrics.histogram("ai.request.duration", now() - startedAt, tags);

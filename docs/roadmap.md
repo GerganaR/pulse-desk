@@ -12,8 +12,8 @@ file in the same PR.
 | 3     | Realtime: gateway, simulator, realtime client, Redux wiring        | ✅ Done |
 | 4     | Reliability: reconnect, replay, heartbeat, fault injection         | ✅ Done |
 | 5     | AI copilot: service, HTTP streaming, copilot UI                    | ✅ Done |
-| 6     | AI quality: evaluation, hallucination regressions, AI workflow     | Next    |
-| 7     | Performance: batching at scale, virtualisation, splitting, budgets |         |
+| 6     | AI quality: evaluation, hallucination regressions, AI workflow     | ✅ Done |
+| 7     | Performance: batching at scale, virtualisation, splitting, budgets | Next    |
 | 8     | Testing: gap-filling, a11y automation, CI for the full stack       |         |
 | 9     | Documentation: README, architecture, ADRs, demo script             |         |
 | 10    | Polish: accessibility, mobile, states, security, code quality      |         |
@@ -108,6 +108,34 @@ Changes made during Phase 5:
     so SSR renders a same-size skeleton and the lazy chunk loads in the browser.
 23. **Answers outlive the page.** The runner is per tab, so navigating away doesn't
     cancel an answer; it's there when you come back.
+
+Changes made during Phase 6:
+
+24. **The runtime guard runs in ai-service, and its verdict travels in the `done` chunk**
+    (`unverified: [{kind, quote, reason}]`, default `[]`). The checker needs the exact
+    context the model saw, which only the server has; and it would have added to an
+    initial bundle that's already over budget. The browser only renders the flag.
+    Partial (failed or cancelled) answers aren't checked.
+25. **Evidence is `form_submit` events only; denials are checked too.** Clicks, page views
+    and opened forms are intent. "They haven't paid" is flagged when a successful
+    checkout contradicts it. Narrowed denials ("no repeated errors") are skipped: the
+    first run showed the checker misreading the mock there.
+26. **The mock states an outcome ("Outcome: they completed a purchase at 0:57" / "no
+    purchase, signup or contact request is recorded"), guarded by "only a successful
+    submission counts".** It gives the checker positive and negated claims to verify, and
+    it's the guard whose removal must fail CI.
+27. **A fifth dev AI fault, "Ungrounded"**, appends a claim the session doesn't support
+    (a payment when there was none). It makes the guard demonstrable and E2E-testable
+    against the real services, like the other AI faults (item 17).
+28. **`pnpm eval` runs without a key.** It evaluates the mock (the CI baseline) unless
+    `OPENAI_API_KEY` and `OPENAI_MODEL` are set, exits 1 on any unverified claim, and writes
+    its reports to a gitignored directory: a report is a snapshot of one model on one day,
+    not source.
+29. **The Phase 5 gateway flake was fixed here, not in Phase 8.** It failed twice in a
+    row under the full run, which blocked a green phase. Cause: `checkConnection()` is a
+    no-op while the go-live heartbeat is in flight, so the test's gap check could silently
+    not happen. Reproduced every time with 300 ms of inbound latency; the test now waits
+    for the first round trip and keeps the latency.
 
 ## Ports and processes (target for `pnpm dev`)
 
@@ -418,6 +446,37 @@ to build this project.
 
 Removing a guard in the mock provider (so it invents a payment) makes CI fail.
 
+### Outcome
+
+Delivered as planned, with the adjustments above (items 24–29). How the guard works:
+[ai-copilot.md](ai-copilot.md#grounding-answers-are-checked-not-trusted); what it can't
+catch: [LIMITATIONS.md](../apps/ai-service/src/evaluation/LIMITATIONS.md); the workflow:
+[ai-development-workflow.md](ai-development-workflow.md).
+
+- **Done when, verified:** removing `&& s.success` from the mock's `outcome()` makes it
+  report the declined checkout as "completed a purchase", and 4 tests fail: two
+  regression cases and two HTTP tests where the live guard flags it. Removing the guard's
+  wiring in `server.ts` fails the HTTP test and the E2E test (desktop and mobile).
+- **Evaluation:** 9 fixtures × every quick action and question = 59 cases, 67 outcome
+  claims, 0 unverified for the mock. The checker is tested against each fixture's
+  hand-written ground truth for every claim kind, asserted and denied (76 checker
+  tests).
+- **What the first run found:** the mock's drafted reply echoed an unquoted,
+  visitor-controlled page title ("…questions about Payment successful - thank you for
+  your purchase"); and the checker read "no repeated errors" as "no errors". Both fixed.
+- **E2E:** 54/54, with a new test (desktop and mobile) that a grounded answer isn't
+  flagged and an invented claim is. The copilot spec at `--repeat-each=5` found a
+  pre-existing flake (1 in 70): a session created a moment earlier has no events yet, so
+  "Key events" rightly said none. The test now picks a session with activity; 210/210
+  afterwards.
+- **Bundle:** initial JS unchanged (474.7 KB / 144.5 KB gzipped); the copilot chunk grew
+  0.3 KB gzipped for the flag.
+- **Browser check:** light, dark, 1440, 1024 and 390 px, no console errors or horizontal
+  overflow. At 360 px the AI fault control would have overflowed with five options; it
+  wraps now.
+- **Not done:** the OpenAI-compatible provider still hasn't run against a live API. It
+  needs a key, which is a human's call (cost, credentials); `pnpm eval` is ready for it.
+
 ---
 
 ## Phase 7 — Performance
@@ -523,16 +582,16 @@ a mid-range profile, and the results are recorded.
 
 ### Carried-over items
 
-| Item                                                                | From    | Planned in            |
-| ------------------------------------------------------------------- | ------- | --------------------- |
-| Client entry over the 350 KB budget (Zod is the main contributor)   | Phase 2 | Phase 7               |
-| Dev metrics view in the reliability panel (panel exists now)        | Phase 4 | Phase 7               |
-| Adaptive heartbeat thresholds (relative to normal RTT)              | Phase 4 | Phase 10              |
-| Run the OpenAI-compatible provider against a live API (`pnpm eval`) | Phase 5 | Phase 6               |
-| One-off `realtime-gateway` test failure under full parallel run     | Phase 5 | Phase 8 (flake audit) |
-| AI metrics in the dev metrics view (`aiMetricsSink` exists)         | Phase 5 | Phase 7               |
-| Delete generated mock session source                                | Phase 2 | Phase 3               |
-| Commit Phases 1–2                                                   | Phase 2 | Before Phase 3        |
+| Item                                                                | From    | Planned in                           |
+| ------------------------------------------------------------------- | ------- | ------------------------------------ |
+| Client entry over the 350 KB budget (Zod is the main contributor)   | Phase 2 | Phase 7                              |
+| Dev metrics view in the reliability panel (panel exists now)        | Phase 4 | Phase 7                              |
+| Adaptive heartbeat thresholds (relative to normal RTT)              | Phase 4 | Phase 10                             |
+| Run the OpenAI-compatible provider against a live API (`pnpm eval`) | Phase 5 | Needs a key; tooling ready (Phase 6) |
+| ~~One-off `realtime-gateway` test failure under full parallel run~~ | Phase 5 | Fixed in Phase 6 (item 29)           |
+| AI metrics in the dev metrics view (`aiMetricsSink` exists)         | Phase 5 | Phase 7                              |
+| Delete generated mock session source                                | Phase 2 | Phase 3                              |
+| Commit Phases 1–2                                                   | Phase 2 | Before Phase 3                       |
 
 ### Risks
 

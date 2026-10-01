@@ -8,5 +8,6 @@ coverage/
 .env.local
 playwright-report/
 test-results/
+eval-reports/
 .DS_Store
 .dev/

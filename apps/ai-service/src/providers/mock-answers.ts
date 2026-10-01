@@ -100,12 +100,35 @@ function summarize(context: AIContext): string {
   ].map((formId) => `opened the ${formName(formId)} form without submitting it`);
   const formFacts = [...forms, ...openedOnly];
   if (formFacts.length > 0) lines.push(`They ${formFacts.join("; they ")}.`);
+  if (context.events.length > 0) lines.push(outcome(context));
 
   const clicks = [...new Set(ofKind(context, "click").map((c) => `"${c.label}"`))].slice(-3);
   if (clicks.length > 0) lines.push(`Clicked: ${clicks.join(", ")}.`);
   if (context.events.length === 0)
     lines.push("No activity has been recorded for this session yet.");
   return lines.join("\n\n");
+}
+
+/** Forms whose successful submission is a conversion, and how to say so. */
+const CONVERSIONS: Record<string, string> = {
+  checkout: "completed a purchase",
+  signup: "signed up",
+  contact_sales: "sent a contact request",
+};
+
+/**
+ * The session's outcome. Guard: only a *successful* submission counts. A click on
+ * "Upgrade to Pro", an opened checkout or a declined card is intent, not a purchase.
+ * The evaluation suite fails if this guard is removed (see evaluation/).
+ */
+function outcome(context: AIContext): string {
+  const achieved = Object.entries(CONVERSIONS).flatMap(([formId, text]) => {
+    const submit = ofKind(context, "form_submit").find((s) => s.formId === formId && s.success);
+    return submit ? [`${text} at ${formatOffset(submit.atMs)}`] : [];
+  });
+  return achieved.length > 0
+    ? `Outcome: they ${achieved.join(" and ")}.`
+    : "Outcome: no purchase, signup or contact request is recorded.";
 }
 
 function blockers(context: AIContext): string {
@@ -153,9 +176,10 @@ function suggestReply(context: AIContext): string {
   if (failing)
     message = `Hi there! I noticed ${friendlyError(failing.last.errorCode)} when you submitted the ${formName(failing.formId)} form. Would you like a hand getting it sorted?`;
   else if (context.session.currentPath.startsWith("/pricing"))
-    message = `Hi! I see you're looking at our ${currentTitle ?? "pricing"} page. If you have any questions about the plans, I'm happy to help.`;
+    message = `Hi! I see you're looking at our pricing. If you have any questions about the plans, I'm happy to help.`;
   else
-    message = `Hi! I'm here if you have any questions${currentTitle ? ` about ${currentTitle}` : ""}. Happy to help.`;
+    // Titles come from the visitor's browser, so they're quoted, never used as our words.
+    message = `Hi! I'm here if you have any questions${currentTitle ? ` about the "${currentTitle}" page` : ""}. Happy to help.`;
   return `${message}\n\n(Draft: review before sending.)`;
 }
 

@@ -26,6 +26,7 @@ const base: AIRequest = {
   attempt: 1,
   model: null,
   finishReason: null,
+  unverified: [],
 };
 
 function renderTurn(overrides: Partial<AIRequest>) {
@@ -36,7 +37,10 @@ function renderTurn(overrides: Partial<AIRequest>) {
       <CopilotTurn request={{ ...base, ...overrides }} onCancel={onCancel} onRetry={onRetry} />
     </ol>,
   );
-  return { onCancel, onRetry, item: screen.getByRole("listitem") };
+  // The turn itself: a flag's claims are list items too.
+  const item = screen.getAllByRole("listitem").find((li) => li.dataset.requestId);
+  if (!item) throw new Error("No turn rendered");
+  return { onCancel, onRetry, item };
 }
 
 describe("CopilotTurn states", () => {
@@ -98,6 +102,34 @@ describe("CopilotTurn states", () => {
     const { item } = renderTurn({ status: "cancelled", text: "Some" });
     expect(item).toHaveTextContent("Cancelled. The partial answer is kept above.");
     expect(within(item).getByRole("button", { name: "Retry" })).toBeInTheDocument();
+  });
+
+  it("done with unverified claims: keeps the answer and flags each claim with its reason", () => {
+    const { item } = renderTurn({
+      status: "done",
+      text: "They viewed pricing.\n\nThe visitor completed the payment.",
+      finishedAt: 2_000,
+      model: "mock",
+      unverified: [
+        {
+          kind: "purchase",
+          quote: "The visitor completed the payment",
+          reason: "no checkout or payment form was submitted successfully",
+        },
+      ],
+    });
+    expect(item.querySelector("[data-answer]")).toHaveTextContent("completed the payment");
+    const flag = item.querySelector("[data-unverified-claims]");
+    expect(flag).toHaveAttribute("data-unverified-claims", "1");
+    expect(flag).toHaveTextContent("Couldn't verify against this session's events:");
+    expect(within(flag as HTMLElement).getByRole("listitem")).toHaveTextContent(
+      "The visitor completed the payment: no checkout or payment form was submitted successfully.",
+    );
+  });
+
+  it("done without unverified claims: no flag", () => {
+    const { item } = renderTurn({ status: "done", text: "Fine.", finishedAt: 2_000 });
+    expect(item.querySelector("[data-unverified-claims]")).toBeNull();
   });
 
   it("renders model output as text, never as markup", () => {
@@ -175,6 +207,43 @@ describe("CopilotPanel", () => {
     await waitFor(() => expect(turn).toHaveAttribute("data-ai-status", "done"));
     expect(turn.querySelector("[data-answer]")).toHaveTextContent("A desktop visitor.");
     expect(screen.getByRole("status")).toHaveTextContent("Answer ready.");
+  });
+
+  it("flags and announces claims the service couldn't verify", async () => {
+    const user = userEvent.setup();
+    const server = streamingFetch();
+    vi.stubGlobal("fetch", server.fetch);
+    render(
+      <Provider store={makeStore()}>
+        <CopilotPanel sessionId="ses_1" />
+      </Provider>,
+    );
+    await user.click(screen.getByRole("button", { name: "Summarise" }));
+    const turn = await screen.findByRole("listitem");
+    server.push(JSON.stringify({ type: "delta", text: "They upgraded to Pro." }));
+    server.push(
+      JSON.stringify({
+        type: "done",
+        finishReason: "stop",
+        model: "mock",
+        unverified: [
+          {
+            kind: "purchase",
+            quote: "They upgraded to Pro",
+            reason: "no checkout or payment form was submitted successfully",
+          },
+        ],
+      }),
+    );
+    server.end();
+
+    await waitFor(() => expect(turn).toHaveAttribute("data-ai-status", "done"));
+    expect(turn.querySelector("[data-unverified-claims]")).toHaveTextContent(
+      "They upgraded to Pro",
+    );
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Answer ready. 1 claim couldn't be verified against the session.",
+    );
   });
 
   it("sends a typed question on Enter, and not an empty one", async () => {

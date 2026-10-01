@@ -12,6 +12,7 @@ import { createMetrics, type Logger, type MetricSink } from "@pulsedesk/observab
 import http, { type IncomingMessage, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import type { AIServiceConfig } from "./config.ts";
+import { checkGrounding } from "./evaluation/grounding.ts";
 import { withFault } from "./faults.ts";
 import { createMockProvider } from "./providers/mock.provider.ts";
 import { createOpenAIProvider } from "./providers/openai.provider.ts";
@@ -159,6 +160,7 @@ export function createAIService({
       signal: controller.signal,
       write: (chunk: AIChunk) => res.write(`${JSON.stringify(chunk)}\n`),
       limits: config,
+      check: (answer) => checkGrounding(answer, request.value.context).unverified,
     });
     const durationMs = Math.round(stop());
     activeStreams--;
@@ -166,6 +168,8 @@ export function createAIService({
     if (outcome.firstTokenMs !== null)
       metrics.histogram("ai.request.first_token", outcome.firstTokenMs, { action });
     if (outcome.kind === "aborted") metrics.increment("ai.request.cancelled", 1, { action });
+    if (outcome.kind === "completed")
+      metrics.histogram("ai.answer.unverified_claims", outcome.unverifiedClaims, { action });
     if (outcome.kind === "failed")
       metrics.increment("ai.request.failed", 1, { action, code: outcome.error.code });
 
@@ -175,6 +179,10 @@ export function createAIService({
       outcome: outcome.kind,
       error: outcome.kind === "failed" ? outcome.error.code : undefined,
       fault: fault ?? undefined,
+      unverifiedClaims:
+        outcome.kind === "completed" && outcome.unverifiedClaims > 0
+          ? outcome.unverifiedClaims
+          : undefined,
       firstTokenMs: outcome.firstTokenMs === null ? undefined : Math.round(outcome.firstTokenMs),
       durationMs,
     });

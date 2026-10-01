@@ -18,7 +18,8 @@
     "check": "turbo run lint typecheck test",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "e2e": "pnpm --filter @pulsedesk/tests e2e"
+    "e2e": "pnpm --filter @pulsedesk/tests e2e",
+    "eval": "pnpm --filter @pulsedesk/ai-service eval"
   },
   "devDependencies": {
     "prettier": "^3.9.9",

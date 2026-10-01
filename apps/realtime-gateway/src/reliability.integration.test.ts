@@ -136,7 +136,12 @@ describe("reliability (real client ↔ gateway)", () => {
   it("finds a trailing gap with no later event, through the heartbeat's head sequence", async () => {
     ingest([created("s1")]);
     startClient({ gapTimeoutMs: 50 });
+    // Slow pongs, as under a loaded CI machine. Going live sends a ping at once, and
+    // checkConnection() is a no-op while one is in flight; that pong reports the old head.
+    // So wait for the first round trip, or the check below may never happen.
+    injector.setLatency(300);
     await until(() => client.getState().status === "live", "live");
+    await until(() => client.getState().rttMs !== null, "first heartbeat");
 
     injector.dropEvents(2);
     ingest([click("s1"), click("s1")]); // lost, and nothing follows them

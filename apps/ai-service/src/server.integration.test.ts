@@ -69,7 +69,12 @@ describe("ai-service HTTP", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toContain("application/x-ndjson");
     const chunks = await readChunks(response);
-    expect(chunks.at(-1)).toEqual({ type: "done", finishReason: "stop", model: "mock" });
+    expect(chunks.at(-1)).toEqual({
+      type: "done",
+      finishReason: "stop",
+      model: "mock",
+      unverified: [],
+    });
     expect(chunks.filter((c) => c.type === "delta").length).toBeGreaterThan(10);
     expect(metrics.get("ai.request.first_token")?.count).toBe(1);
   });
@@ -152,6 +157,28 @@ describe("ai-service HTTP", () => {
       );
       expect(slow).toEqual(normal);
       expect(performance.now() - started).toBeGreaterThan(normal.length * 15);
+    });
+
+    it("ungrounded: the invented payment is streamed, then flagged by the grounding guard", async () => {
+      const { url, metrics } = await start({ debug: true });
+      const chunks = await readChunks(
+        await post(url, makeRequest(), { [AI_FAULT_HEADER]: "ungrounded" }),
+      );
+      const text = chunks.flatMap((c) => (c.type === "delta" ? [c.text] : [])).join("");
+      expect(text).toContain("The visitor completed the payment for the Pro plan.");
+      expect(chunks.at(-1)).toEqual({
+        type: "done",
+        finishReason: "stop",
+        model: "mock",
+        unverified: [
+          {
+            kind: "purchase",
+            quote: "The visitor completed the payment for the Pro plan",
+            reason: "no checkout or payment form was submitted successfully",
+          },
+        ],
+      });
+      expect(metrics.get("ai.answer.unverified_claims")?.sum).toBe(1);
     });
   });
 });

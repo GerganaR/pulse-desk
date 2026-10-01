@@ -77,7 +77,8 @@ describe("streamAIChat", () => {
     expect(chunks).toEqual([
       { type: "delta", text: "Hel" },
       { type: "delta", text: "lo" },
-      { type: "done", finishReason: "stop", model: "mock" },
+      // `unverified` defaults to [], so a service that predates the grounding guard still parses.
+      { type: "done", finishReason: "stop", model: "mock", unverified: [] },
     ]);
     const [url, init] = vi.mocked(fetch!).mock.calls[0]!;
     expect(url).toBe("/api/ai/chat");

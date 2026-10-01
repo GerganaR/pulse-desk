@@ -29,6 +29,8 @@ const AI_FAULT_OPTIONS: readonly { value: AIFault | null; label: string }[] = [
   { value: "timeout", label: "Timeout" },
   { value: "http_500", label: "Error 500" },
   { value: "slow", label: "Slow" },
+  // The model appends a claim the session doesn't support; the grounding guard flags it.
+  { value: "ungrounded", label: "Ungrounded" },
 ];
 
 function useClientStats(client: RealtimeClient) {
@@ -270,7 +272,7 @@ function Segmented<T>({
     <fieldset className="pt-3 pb-2">
       <legend className="text-sm text-fg">{legend}</legend>
       <p className="text-xs text-fg-muted">{description}</p>
-      <div className="mt-2 inline-flex rounded-lg border border-line bg-surface-muted p-0.5">
+      <div className="mt-2 inline-flex flex-wrap rounded-lg border border-line bg-surface-muted p-0.5">
         {options.map((option) => (
           <label
             key={option.label}

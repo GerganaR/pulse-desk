@@ -1,8 +1,8 @@
-import type { AIChunk, AIError, AIServiceRequest } from "@pulsedesk/contracts";
+import type { AIChunk, AIError, AIServiceRequest, UnverifiedClaim } from "@pulsedesk/contracts";
 import { ProviderError, type AIProvider } from "./providers/types.ts";
 
 export type StreamOutcome =
-  | { kind: "completed"; firstTokenMs: number | null }
+  | { kind: "completed"; firstTokenMs: number | null; unverifiedClaims: number }
   | { kind: "failed"; error: AIError; firstTokenMs: number | null }
   /** The caller went away (browser cancelled, proxy aborted): nothing more is written. */
   | { kind: "aborted"; firstTokenMs: number | null };
@@ -27,6 +27,10 @@ class StreamTimeout extends Error {
  *
  * Both time limits abort the provider, and the loop races every `next()` against the
  * abort, so a provider that ignores its signal still can't hold the response open.
+ *
+ * `check` runs on the complete answer and its result goes out in the `done` chunk: the
+ * runtime grounding guard. Partial answers (failed, cancelled) aren't checked; they're
+ * already shown as incomplete.
  */
 export async function streamAnswer({
   provider,
@@ -34,6 +38,7 @@ export async function streamAnswer({
   signal,
   write,
   limits,
+  check = () => [],
   now = () => performance.now(),
 }: {
   provider: AIProvider;
@@ -42,6 +47,8 @@ export async function streamAnswer({
   signal: AbortSignal;
   write: (chunk: AIChunk) => void;
   limits: StreamLimits;
+  /** Claims in the complete answer the session doesn't support. */
+  check?: (answer: string) => UnverifiedClaim[];
   now?: () => number;
 }): Promise<StreamOutcome> {
   const controller = new AbortController();
@@ -51,6 +58,7 @@ export async function streamAnswer({
 
   const started = now();
   let firstTokenMs: number | null = null;
+  let answer = "";
   const firstTokenTimer = setTimeout(
     () => controller.abort(new StreamTimeout("first_token")),
     limits.firstTokenTimeoutMs,
@@ -71,14 +79,16 @@ export async function streamAnswer({
     for (;;) {
       const result = await Promise.race([iterator.next(), aborted]);
       if (result.done) {
-        write({ type: "done", finishReason: result.value, model: provider.model });
-        return { kind: "completed", firstTokenMs };
+        const unverified = check(answer);
+        write({ type: "done", finishReason: result.value, model: provider.model, unverified });
+        return { kind: "completed", firstTokenMs, unverifiedClaims: unverified.length };
       }
       if (!result.value) continue;
       if (firstTokenMs === null) {
         firstTokenMs = now() - started;
         clearTimeout(firstTokenTimer);
       }
+      answer += result.value;
       write({ type: "delta", text: result.value });
     }
   } catch (error) {

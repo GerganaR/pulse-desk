@@ -94,7 +94,7 @@ function setup() {
   };
 }
 
-const done: Chunk = { type: "done", finishReason: "stop", model: "mock" };
+const done: Chunk = { type: "done", finishReason: "stop", model: "mock", unverified: [] };
 
 describe("AI runner", () => {
   it("batches streamed text into one update per frame", async () => {
@@ -122,6 +122,17 @@ describe("AI runner", () => {
     expect(t.frames.size).toBe(0);
     expect(t.sink.get("ai.request.first_token")?.last).toBe(300);
     expect(t.sink.get("ai.request.duration")?.count).toBe(1);
+  });
+
+  it("stores the claims the service couldn't verify with the finished answer", async () => {
+    const t = setup();
+    const id = t.runner.ask({ sessionId: "s1", action: "summarize" });
+    await t.settle();
+    const claim = { kind: "purchase", quote: "They paid", reason: "no payment" } as const;
+    t.queues[0]!.push({ type: "delta", text: "They paid." });
+    t.queues[0]!.push({ ...done, unverified: [claim] });
+    await t.settle();
+    expect(t.get(id)).toMatchObject({ status: "done", unverified: [claim] });
   });
 
   it("sends the request with the session, action and extra headers", async () => {
