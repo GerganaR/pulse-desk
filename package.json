@@ -13,6 +13,7 @@
     "build:devtools": "turbo run build:devtools",
     "start": "turbo run start --filter=@pulsedesk/web",
     "test": "turbo run test",
+    "coverage": "pnpm -r --if-present --no-bail test --coverage",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "check": "turbo run lint typecheck test",
@@ -26,6 +27,7 @@
     "eval": "pnpm --filter @pulsedesk/ai-service eval"
   },
   "devDependencies": {
+    "@vitest/coverage-v8": "^5.0.3",
     "prettier": "^3.9.9",
     "turbo": "^2.11.5",
     "typescript": "~6.0.3"

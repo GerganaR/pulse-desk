@@ -14,7 +14,7 @@ file in the same PR.
 | 5     | AI copilot: service, HTTP streaming, copilot UI                    | ✅ Done |
 | 6     | AI quality: evaluation, hallucination regressions, AI workflow     | ✅ Done |
 | 7     | Performance: batching at scale, virtualisation, splitting, budgets | Next    |
-| 8     | Testing: gap-filling, a11y automation, CI for the full stack       |         |
+| 8     | Testing: gap-filling, a11y automation, CI for the full stack       | ✅ Done |
 | 9     | Documentation: README, architecture, ADRs, demo script             |         |
 | 10    | Polish: accessibility, mobile, states, security, code quality      |         |
 
@@ -150,6 +150,36 @@ Changes made during Phase 6:
 32. **The development CSP allows the asset server over HTTP, not only WebSocket.**
     Source maps and hot-update manifests are fetched from it over HTTP, and each one was
     blocked and logged. Production is unchanged (assets are same-origin there).
+
+Changes made during Phase 8:
+
+33. **What the accessibility scan found was fixed here, not deferred to Phase 10.** A scan
+    that fails can't guard anything, and an allow-list of known violations would hide new
+    ones next to old ones. Seven kinds of problem were fixed (listed under the Phase 8
+    outcome); four light-theme colours changed as a result.
+34. **Error and outage states come from a third web server, not from test hooks.** The
+    E2E stack starts the production build once more with its gateway pointed at a closed
+    port. Pages there server-render their error state and the socket keeps retrying,
+    which is exactly what a user sees when the gateway is down. No test-only code path
+    in the app.
+35. **Every state is scanned in both themes, with axe's best-practice rules on top of
+    WCAG 2.2 A and AA.** Contrast is per theme, and the structural problems (two banner
+    landmarks, a list inside `role="log"`) were all best-practice findings. The scan waits
+    for colour transitions to finish first: measured mid-fade, a theme switch reads as a
+    contrast failure that isn't there.
+36. **A state has to be what its name says before it is scanned.** A timeline that is too
+    short to scroll passes "scrollable regions are keyboard accessible" whether or not
+    they are. The scan now fills the timeline and the conversation until they scroll, and
+    asserts that they do.
+37. **E2E specs that depend on a session's content create their own session.** The copilot
+    spec used "any active session with two page views", which could be another spec's
+    250-event session, and the mock words its answer differently for a long session.
+38. **No coverage threshold.** `pnpm coverage` reports per package; the review picked
+    untested logic by what breaks if it is wrong (limits, error mapping, security
+    headers), and a percentage gate would reward the opposite.
+39. **Full-stack E2E in CI needed no new work.** It arrived with Phases 3–5 (gateway,
+    seeded simulator, ai-service and two web builds under Playwright's `webServer`).
+    Phase 8 added the outage server and uploads traces when a run fails.
 
 ## Ports and processes (target for `pnpm dev`)
 
@@ -552,6 +582,78 @@ a mid-range profile, and the results are recorded.
   ai-service and a deterministic simulator seed.
 - Flake audit: run E2E ×20 locally, and fix any source of nondeterminism.
 
+### Outcome
+
+Delivered, with the adjustments above (items 33–39). Two carried-over items could not be
+closed and are listed below with what is known.
+
+- **Accessibility scan** (`tests/e2e/a11y.spec.ts`): 18 tests on desktop and mobile, 33
+  named states, each in light and dark. Pages: dashboard (chart, tooltip, table view),
+  sessions list (all, filtered, nothing matching), session detail (details, activity,
+  copilot empty and answered, long timeline, long conversation), both not-found pages,
+  account menu. States: loading, load failed, page chunk failed, reconnecting, degraded,
+  prolonged outage, recovery notice, reliability panel and its metrics view, a failed
+  answer, an unverified claim.
+- **What it found, all fixed:**
+  - Text contrast below 4.5:1 in the light theme: subtle text (4.29 on white, 3.76 on a
+    hovered row) and the live, warning and info badges (3.18 to 3.93 on their tints).
+    `--pd-fg-subtle`, `--pd-live`, `--pd-warning` and `--pd-info` are darker now, and
+    `--pd-danger` slightly. The dark theme passed as it was.
+  - The danger button faded on hover, taking its label to 3.82:1. It has a solid hover
+    colour now (`--pd-danger-hover`).
+  - A long timeline or copilot conversation could not be scrolled from the keyboard.
+    Both scroll areas are focusable now.
+  - Two banner landmarks whenever a dialog was open (`<header>` inside `<dialog>`).
+  - The fault log put `role="log"` on the list itself, which left its items without a
+    list.
+  - The metrics view had a `<span>` inside a `<dl>` group.
+  - A page whose chunk failed to load had no `<h1>` and lost its document title.
+- **Component tests:** the connection pill is tested through the store in all 13 states it
+  can show (label announced, detail shown, countdown ticking without re-announcing); the
+  outage banner when closed, mid-attempt and due; the copilot when cut at the length
+  limit, cancelled, retried, failed with no text, with several unverified claims, on
+  Shift+Enter, and server-rendered (a placeholder with no controls).
+- **Coverage review:** `pnpm coverage` (new) per package. Tests were added where a
+  mistake would be a security or reliability problem and nothing covered it:
+  - web server: the CSP (no inline or evaluated script in any configuration), the SSR
+    data budget (abort and fall back to loading in the browser), gateway failures
+    (timeout, unreachable, malformed, 404), the same-origin API (503 without leaking the
+    cause, abort when the browser leaves), cookie parsing;
+  - browser: response validation at the HTTP boundary; when a reconnect earns a toast
+    and what it says;
+  - gateway: ingest limits (not JSON, too many events, body too large), the connection
+    cap, upgrades only on `/ws`, the liveness heartbeat;
+  - state: loading a timeline (failure, retry, cancel, another stream epoch, late and
+    repeated live events);
+  - realtime client: the browser signals (offline, online, tab hidden and shown);
+  - logging: the JSON line format.
+    Left alone on purpose: process entry points (`main.ts`, `server.ts`), which E2E starts
+    for real, and presentational components the E2E and axe specs render.
+- **Tests now:** 675 unit and component tests (`pnpm check`), 94 E2E.
+- **Flake audit:** see the numbers under "Flake audit" below.
+- **`gemini-3.8-flash` cut-off answer: cause not found.** The model's free tier allows 20
+  requests a day and Phase 6's run had used them, so it could not be asked again
+  (5 attempts: one 503, four 429). What is established: the saved answer is about 17
+  tokens after 6.8 s, which fits a model that spent the 600-token limit on reasoning,
+  and explains the cut at the end. It does not explain the missing start. A real stream
+  captured from `gemini-3.5-flash-lite` is now a provider test, split at every byte
+  offset: the provider drops nothing from a well-formed stream.
+
+### Flake audit
+
+- **E2E:** 8 full runs on the final code, each on a fresh stack: 94/94 every time. An
+  earlier pass on the code before the last two fixes ran 12 times: 11 clean, and one that
+  failed because the laptop suspended for three hours mid-run. The planned 20 runs on
+  the final code were stopped at 8.
+- **Unit and component tests:** `pnpm check` uncached, five times in a row, green.
+- **Two sources of nondeterminism found and fixed:** the copilot spec borrowed whichever
+  session was active (item 37), and a whole-page hydration test reached the 5 s default
+  timeout once when every package's tests ran at the same time (the web timeout is 20 s
+  now).
+- **The suspended run was useful:** the timeline filled with missed events, became
+  scrollable, and the scan reported that it couldn't be scrolled from the keyboard
+  (item 36).
+
 ---
 
 ## Phase 9 — Documentation
@@ -605,21 +707,23 @@ a mid-range profile, and the results are recorded.
 
 ### Carried-over items
 
-| Item                                                                                                                                                                                                       | From    | Planned in                     |
-| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | ------------------------------ |
-| Client entry over the 350 KB budget (Zod is the main contributor)                                                                                                                                          | Phase 2 | Phase 7                        |
-| Dev metrics view in the reliability panel (panel exists now)                                                                                                                                               | Phase 4 | Phase 7                        |
-| Adaptive heartbeat thresholds (relative to normal RTT)                                                                                                                                                     | Phase 4 | Phase 10                       |
-| Full 59-case `pnpm eval` against a real model (first live run: 7 answers, Phase 6)                                                                                                                         | Phase 5 | Needs the developer's quota    |
-| `gemini-3.8-flash` answer cut off at both ends: find the cause                                                                                                                                             | Phase 6 | Phase 8                        |
-| ~~One-off `realtime-gateway` test failure under full parallel run~~                                                                                                                                        | Phase 5 | Fixed in Phase 6 (item 29)     |
-| AI metrics in the dev metrics view (`aiMetricsSink` exists)                                                                                                                                                | Phase 5 | Phase 7                        |
-| Mobile timeline once seen one row short of the bottom in a screenshot; not reproduced in 12 reruns and 50 scroll samples                                                                                   | Phase 7 | Phase 8                        |
-| Occasional single 50–67 ms frame under a 1,000 events/s burst at 4× CPU throttle (about one run in three, one scenario); the frame-time bar was set to p95 ≤ 34 ms, no frame over 100 ms, ≤ 50 ms blocking | Phase 7 | Phase 8                        |
-| "Live" arrives up to 20 ms later on localhost for the dashboard and sessions list: the connection now starts after hydration                                                                               | Phase 7 | Phase 10                       |
-| Rspack's size warning still fires: it counts JS + CSS (382.7 KB against 350 KB). CI enforces initial JS ≤ 350 KB instead; the budget definition needs a decision                                           | Phase 7 | Needs the developer's decision |
-| Delete generated mock session source                                                                                                                                                                       | Phase 2 | Phase 3                        |
-| Commit Phases 1–2                                                                                                                                                                                          | Phase 2 | Before Phase 3                 |
+| Item                                                                                                                                                                                                                          | From    | Planned in                     |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | ------------------------------ |
+| Client entry over the 350 KB budget (Zod is the main contributor)                                                                                                                                                             | Phase 2 | Phase 7                        |
+| Dev metrics view in the reliability panel (panel exists now)                                                                                                                                                                  | Phase 4 | Phase 7                        |
+| Adaptive heartbeat thresholds (relative to normal RTT)                                                                                                                                                                        | Phase 4 | Phase 10                       |
+| Full 59-case `pnpm eval` against a real model (first live run: 7 answers, Phase 6)                                                                                                                                            | Phase 5 | Needs the developer's quota    |
+| `gemini-3.8-flash` answer cut off at both ends: cause still unknown (Phase 8 outcome). Needs one raw stream from that model; its free tier is 20 requests a day                                                               | Phase 6 | Needs the developer's quota    |
+| ~~One-off `realtime-gateway` test failure under full parallel run~~                                                                                                                                                           | Phase 5 | Fixed in Phase 6 (item 29)     |
+| AI metrics in the dev metrics view (`aiMetricsSink` exists)                                                                                                                                                                   | Phase 5 | Phase 7                        |
+| Mobile timeline once seen one row short of the bottom in a screenshot. Still not reproduced in Phase 8: 60 dedicated passes of the mobile timeline spec, and every audit run                                                  | Phase 7 | Phase 10 (responsive pass)     |
+| Occasional single 50–67 ms frame under a 1,000 events/s burst at 4× CPU throttle. Not measured in Phase 8: the machine was busy and `pnpm perf` varied too much to compare (same spread with and without the Phase 8 changes) | Phase 7 | Phase 10, on a quiet machine   |
+| "Live" arrives up to 20 ms later on localhost for the dashboard and sessions list: the connection now starts after hydration                                                                                                  | Phase 7 | Phase 10                       |
+| Rspack's size warning still fires: it counts JS + CSS (382.7 KB against 350 KB). CI enforces initial JS ≤ 350 KB instead; the budget definition needs a decision                                                              | Phase 7 | Needs the developer's decision |
+| `pnpm eval` retries a 429 that is a per-day quota (the provider still says "retry in 1s"), so it waits and fails again until retries run out                                                                                  | Phase 8 | Phase 10                       |
+| The `tests/` workspace has no ESLint configuration, so E2E and load specs are type-checked but not linted                                                                                                                     | Phase 8 | Phase 10                       |
+| Delete generated mock session source                                                                                                                                                                                          | Phase 2 | Phase 3                        |
+| Commit Phases 1–2                                                                                                                                                                                                             | Phase 2 | Before Phase 3                 |
 
 ### Risks
 

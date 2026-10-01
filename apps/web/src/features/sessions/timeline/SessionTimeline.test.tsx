@@ -84,6 +84,12 @@ describe("SessionTimeline", () => {
     expect(screen.getByRole("list")).not.toHaveAttribute("data-virtual");
   });
 
+  it("can be focused, so the keyboard can scroll it (its rows hold nothing to tab to)", () => {
+    render(<SessionTimeline events={pageViews(1, 30)} startedAt={STARTED_AT} truncated={false} />);
+    expect(screen.getByRole("group", { name: "Activity timeline" })).toBe(scroller());
+    expect(scroller()).toHaveAttribute("tabindex", "0");
+  });
+
   it("hides events that have no presentation (stopped typing)", () => {
     const stopped: RealtimeEvent = {
       ...pageView(2),

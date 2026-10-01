@@ -35,3 +35,51 @@ export async function ingestPageViews(
   });
   return titles;
 }
+
+/**
+ * Create a session of the test's own through the ingest endpoint and return its id. A
+ * session the simulator owns changes under the test (and eventually ends); this one only
+ * has the activity the test records for it.
+ */
+export async function createSession(request: APIRequestContext, label: string): Promise<string> {
+  const id = `ses_e2e_${label}_${process.pid}_${Date.now().toString(36)}_${counter++}`;
+  const now = Date.now();
+  const response = await request.post(`${gatewayHttp}/ingest`, {
+    data: {
+      events: [
+        {
+          type: "session.created",
+          eventId: `${id}_created`,
+          sessionId: id,
+          timestamp: now,
+          payload: {
+            session: {
+              id,
+              visitor: {
+                id: `vis_${id}`,
+                label: "Visitor #4242",
+                name: null,
+                country: "BG",
+                city: "Sofia",
+              },
+              device: "desktop",
+              browser: "Chrome",
+              os: "Linux",
+              referrer: null,
+              landingPath: "/pricing",
+              currentPath: "/pricing",
+              status: "active",
+              startedAt: now - 60_000,
+              lastActivityAt: now,
+              endedAt: null,
+              pageViews: 0,
+              eventCount: 0,
+            },
+          },
+        },
+      ],
+    },
+  });
+  expect(((await response.json()) as { accepted: number }).accepted).toBe(1);
+  return id;
+}

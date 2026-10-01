@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { createLogger, type LogRecord } from "./logger.ts";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { createLogger, errorFields, jsonConsoleSink, type LogRecord } from "./logger.ts";
 import { createMemorySink, createMetrics } from "./metrics.ts";
 
 describe("metrics", () => {
@@ -65,5 +65,62 @@ describe("logger", () => {
       message: "slow consumer",
       fields: { service: "gw", connectionId: "c1", bufferedBytes: 1024 },
     });
+  });
+});
+
+describe("log output", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("writes one JSON object per line, on the console method for its level", () => {
+    const output = {
+      info: vi.spyOn(console, "info").mockImplementation(() => {}),
+      warn: vi.spyOn(console, "warn").mockImplementation(() => {}),
+      error: vi.spyOn(console, "error").mockImplementation(() => {}),
+    };
+    const logger = createLogger({ sink: jsonConsoleSink, fields: { service: "gateway" } });
+    logger.info("gateway.listening", { port: 4000 });
+    logger.warn("client.slow_consumer");
+    logger.error("http.unhandled", errorFields(new Error("boom")));
+
+    const lines = [output.info, output.warn, output.error].map((spy) => {
+      expect(spy).toHaveBeenCalledOnce();
+      const line = String(spy.mock.calls[0]![0]);
+      expect(line).not.toContain("\n");
+      return JSON.parse(line) as Record<string, unknown>;
+    });
+    expect(lines[0]).toMatchObject({
+      level: "info",
+      msg: "gateway.listening",
+      service: "gateway",
+      port: 4000,
+    });
+    expect(new Date(String(lines[0]!.time)).toISOString()).toBe(lines[0]!.time);
+    expect(lines[1]).toMatchObject({ level: "warn", msg: "client.slow_consumer" });
+    expect(lines[2]).toMatchObject({ level: "error", error: "boom" });
+    expect(String(lines[2]!.stack)).toContain("Error: boom");
+  });
+
+  it("lets a later field override an earlier one: call site over child over logger", () => {
+    const records: LogRecord[] = [];
+    const logger = createLogger({
+      sink: { write: (r) => records.push(r) },
+      fields: { a: 1, b: 1 },
+    });
+    logger.child({ b: 2, c: 2 }).info("x", { c: 3 });
+    expect(records[0]!.fields).toEqual({ a: 1, b: 2, c: 3 });
+  });
+
+  it("a child keeps its parent's level", () => {
+    const records: LogRecord[] = [];
+    const logger = createLogger({ sink: { write: (r) => records.push(r) }, level: "error" });
+    logger.child({ id: 1 }).warn("dropped");
+    logger.child({ id: 1 }).error("kept");
+    expect(records.map((r) => r.message)).toEqual(["kept"]);
+  });
+
+  it("describes anything thrown, not only Errors", () => {
+    expect(errorFields("just a string")).toEqual({ error: "just a string" });
+    expect(errorFields(undefined)).toEqual({ error: "undefined" });
+    expect(errorFields({ code: 7 })).toEqual({ error: "[object Object]" });
   });
 });

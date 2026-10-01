@@ -107,7 +107,8 @@ export function Dialog({
     >
       {open && (
         <>
-          <header className="flex items-start gap-3 border-b border-line px-4 py-3">
+          {/* Not <header>: outside sectioning content it would be a second page banner. */}
+          <div className="flex items-start gap-3 border-b border-line px-4 py-3">
             <div className="min-w-0 flex-1">
               <h2 id={titleId} className="text-sm font-semibold text-fg">
                 {title}
@@ -127,7 +128,7 @@ export function Dialog({
             >
               <X aria-hidden="true" className="size-4" />
             </button>
-          </header>
+          </div>
           <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
         </>
       )}

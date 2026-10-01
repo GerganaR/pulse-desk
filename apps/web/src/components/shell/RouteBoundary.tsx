@@ -2,6 +2,7 @@ import { Button, Card, ErrorState, Skeleton } from "@pulsedesk/ui";
 import { RotateCw } from "lucide-react";
 import { Component, Suspense, type ReactNode } from "react";
 import { useLocation } from "react-router";
+import { PageHeader } from "@/components/PageHeader";
 
 interface BoundaryProps {
   /** Changes on navigation, so going somewhere else clears the error. */
@@ -40,20 +41,24 @@ class RouteErrorBoundary extends Component<BoundaryProps, BoundaryState> {
   override render() {
     if (!this.state.failed) return this.props.children;
     return (
-      <Card>
-        <ErrorState
-          title="This page couldn't be loaded"
-          description="The app may have been updated, or the connection dropped. Reloading usually fixes it."
-          action={
-            <Button
-              onClick={() => window.location.reload()}
-              leadingIcon={<RotateCw aria-hidden="true" className="size-3.5" />}
-            >
-              Reload
-            </Button>
-          }
-        />
-      </Card>
+      <>
+        {/* The page that would have set the heading and the document title never rendered. */}
+        <PageHeader title="Page unavailable" />
+        <Card>
+          <ErrorState
+            title="This page couldn't be loaded"
+            description="The app may have been updated, or the connection dropped. Reloading usually fixes it."
+            action={
+              <Button
+                onClick={() => window.location.reload()}
+                leadingIcon={<RotateCw aria-hidden="true" className="size-3.5" />}
+              >
+                Reload
+              </Button>
+            }
+          />
+        </Card>
+      </>
     );
   }
 }

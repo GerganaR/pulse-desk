@@ -1,6 +1,7 @@
-import type { Locator, Page } from "@playwright/test";
+import type { APIRequestContext, Locator, Page } from "@playwright/test";
 import { aiServiceHttp, devtoolsWebUrl, gatewayHttp } from "./env.ts";
 import { expect, test } from "./fixtures.ts";
+import { createSession, ingestPageViews } from "./gateway.ts";
 
 /**
  * AI copilot, end to end: browser → web server (/api/ai/chat) → ai-service (mock provider)
@@ -15,24 +16,16 @@ import { expect, test } from "./fixtures.ts";
 const indicator = (page: Page) => page.locator("[data-status]:visible");
 
 /**
- * Opens an active session that already has activity. A session the simulator created a
- * moment ago has no events yet, and the copilot rightly says so, which isn't what these
- * tests are about (it made "Key events, in order:" flaky under --repeat-each).
+ * Opens a session of the test's own, with a little activity. Not one of the simulator's
+ * or another spec's: what the copilot says depends on the session (one created a moment
+ * ago has no events to list, and a long one gets "the 10 most recent" instead of "in
+ * order"), so borrowing whichever session happened to be active made answers vary by run.
  */
-async function openActiveSession(page: Page) {
-  let href: string | undefined;
-  await expect
-    .poll(async () => {
-      const response = await page.request.get(`${gatewayHttp}/sessions`);
-      const { sessions } = (await response.json()) as {
-        sessions: { id: string; status: string; pageViews: number }[];
-      };
-      const session = sessions.find((s) => s.status === "active" && s.pageViews >= 2);
-      href = session && `/sessions/${session.id}`;
-      return href;
-    })
-    .toMatch(/^\/sessions\/ses_/);
-  await page.goto(href!);
+async function openActiveSession(page: Page, request: APIRequestContext) {
+  const sessionId = await createSession(request, "copilot");
+  await ingestPageViews(request, sessionId, 3);
+  const href = `/sessions/${sessionId}`;
+  await page.goto(href);
   await expect(indicator(page)).toHaveAttribute("data-status", "live");
   await recordConnectionStatuses(page);
 
@@ -41,7 +34,7 @@ async function openActiveSession(page: Page) {
   if (await tab.isVisible()) await tab.click();
   const copilot = page.getByRole("region", { name: "Copilot" });
   await expect(copilot.getByRole("group", { name: "Quick actions" })).toBeVisible();
-  return { copilot, sessionId: href!.split("/").at(-1)! };
+  return { copilot, sessionId };
 }
 
 /** Records every connection status other than Live from now on. */
@@ -96,7 +89,7 @@ test.describe("AI copilot", () => {
     page,
     request,
   }) => {
-    const { copilot, sessionId } = await openActiveSession(page);
+    const { copilot, sessionId } = await openActiveSession(page, request);
     await recordAnswerProgress(copilot);
 
     await quickAction(copilot, "Summarise").click();
@@ -172,7 +165,7 @@ test.describe("AI copilot failures (devtools build)", () => {
     page,
     request,
   }) => {
-    const { copilot } = await openActiveSession(page);
+    const { copilot } = await openActiveSession(page, request);
     await setAIFault(page, "Slow");
 
     await quickAction(copilot, "Summarise").click();
@@ -204,8 +197,9 @@ test.describe("AI copilot failures (devtools build)", () => {
 
     test("a 500 shows the error state, and retry succeeds once the fault is cleared", async ({
       page,
+      request,
     }) => {
-      const { copilot } = await openActiveSession(page);
+      const { copilot } = await openActiveSession(page, request);
       await setAIFault(page, "Error 500");
 
       await quickAction(copilot, "What's blocking?").click();
@@ -226,8 +220,9 @@ test.describe("AI copilot failures (devtools build)", () => {
 
   test("the grounding guard flags an invented claim, and not a grounded answer", async ({
     page,
+    request,
   }) => {
-    const { copilot } = await openActiveSession(page);
+    const { copilot } = await openActiveSession(page, request);
 
     // The mock's own answer about this live session passes the guard.
     await quickAction(copilot, "Summarise").click();
@@ -255,8 +250,8 @@ test.describe("AI copilot failures (devtools build)", () => {
     await expectConnectionStayedLive(page);
   });
 
-  test("a model that never answers times out with an explanation", async ({ page }) => {
-    const { copilot } = await openActiveSession(page);
+  test("a model that never answers times out with an explanation", async ({ page, request }) => {
+    const { copilot } = await openActiveSession(page, request);
     await setAIFault(page, "Timeout");
 
     await quickAction(copilot, "Suggest reply").click();
